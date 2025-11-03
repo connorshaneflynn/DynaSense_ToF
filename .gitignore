@@ -1,3 +1,61 @@
-build
-mx.scratch
-!.settings
+# --- IDE and editor files ---
+.vscode/
+*.code-workspace
+*.swp
+*.swo
+*.bak
+*.tmp
+*~
+*.user
+*.launch
+
+# --- STM32CubeMX generated files ---
+*.ioc
+*.mxproject
+.settings/
+*.launch
+*.db
+
+# --- Build and CMake ---
+build/
+Build/
+BUILD/
+Debug/
+Release/
+*.elf
+*.hex
+*.bin
+*.map
+*.list
+*.out
+*.o
+*.d
+
+CMakeCache.txt
+CMakeFiles/
+CMakeUserPresets.json
+CMakePresets.json
+
+# --- Compiler / IDE artifacts ---
+*.dep
+*.obj
+*.a
+*.so
+*.exe
+*.log
+
+# --- System files ---
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# --- Generated Makefiles (optional) ---
+# Uncomment if you regenerate Makefiles from CubeMX
+# Makefile
+# STM32*.ld
+
+# --- Miscellaneous ---
+*.bak
+*.orig
+*.rej
+
