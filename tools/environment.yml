@@ -1,0 +1,17 @@
+name: embed
+channels:
+  - conda-forge
+  - defaults
+dependencies:
+  - ipython
+  - pip
+  - python=3.10.14
+  - anaconda::pyserial
+  - conda-forge::matplotlib
+  - conda-forge::pyqtgraph
+  - numpy
+  - conda-forge::pyqt
+  - conda-forge::pyside6
+  - pandas
+  - pyusb
+prefix: C:\Users\conno\miniconda3\envs\embed
