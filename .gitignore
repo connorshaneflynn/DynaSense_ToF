@@ -54,6 +54,15 @@ desktop.ini
 # Makefile
 # STM32*.ld
 
+# --- Test Files ---
+test*.*
+
+# Logging and Data Output
+*logs/
+*.png
+*.jpg
+*.csv
+
 # --- Miscellaneous ---
 *.bak
 *.orig
