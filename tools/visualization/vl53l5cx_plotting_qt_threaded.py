@@ -7,7 +7,7 @@ from PySide6 import QtWidgets, QtCore
 import pyqtgraph as pg
 from collections import defaultdict, deque
 
-SERIAL_PORT = 'COM6'  # COM4 for USB, COM6 for UART
+SERIAL_PORT = '/dev/ttyACM1'  # Windows: COM4 for USB, COM6 for UART    Ubuntu: '/dev/ttyACM1'
 BAUD_RATE = 230400
 RESOLUTION = 16
 FRAME_SIZE = 2 + 1 + RESOLUTION * 2 + RESOLUTION  # header + ID + distances + statuses
