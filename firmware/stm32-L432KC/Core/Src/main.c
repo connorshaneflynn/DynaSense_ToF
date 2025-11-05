@@ -109,7 +109,7 @@ int main(void)
   MX_USB_DEVICE_Init();
   /* USER CODE BEGIN 2 */
 
-  int status = initialize();
+  [[maybe_unused]] int status = initialize();
 
   /* USER CODE END 2 */
 

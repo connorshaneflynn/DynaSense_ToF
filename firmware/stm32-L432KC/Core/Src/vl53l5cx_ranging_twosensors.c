@@ -1,21 +1,20 @@
 #include "vl53l5cx_ranging_twosensors.h"
 
 #include "main.h"
+#include "stm32l4xx_hal_def.h"
 #include "usb_device.h"
-
-
-#include "usbd_cdc_if.h"
 
 #include <stdbool.h>
 #include <string.h>
 #include <stdio.h>
 
+#include "usbd_def.h"
 #include "vl53l5cx_api.h"
 #include <usart.h>
 #include <i2c.h>
-// #include "../Drivers/VL53L4CD/Inc/VL53L4CD_api.h"
 
-/* USER CODE BEGIN 0 */
+#include "usbd_customhid.h"
+extern USBD_HandleTypeDef hUsbDeviceFS;
 
 /* Sensor structures */
 static VL53L5CX_Configuration Dev1, Dev2;
@@ -154,16 +153,19 @@ void send_measurements(uint8_t sensor_ID, VL53L5CX_ResultsData *results) // int1
   }
 
   // Send
-  uint8_t status_transmit;
-  // USB
+  // USB HID
   if (COM_USB)
   {
-    status_transmit = CDC_Transmit_FS(buffer, sizeof(buffer));
+    [[maybe_unused]] USBD_HandleTypeDef handle = hUsbDeviceFS;
+    [[maybe_unused]] uint8_t status_transmit_usb;
+    status_transmit_usb = USBD_CUSTOM_HID_SendReport(&hUsbDeviceFS, buffer, 64);  // Todo: or do size of?
+    [[maybe_unused]] int i = 5;
   }
   // UART
   if (COM_UART)
   {
-  HAL_UART_Transmit(&huart2, buffer, idx, HAL_MAX_DELAY);
+  [[maybe_unused]] HAL_StatusTypeDef status_transmit_uart = HAL_OK;
+  status_transmit_uart = HAL_UART_Transmit(&huart2, buffer, idx, HAL_MAX_DELAY);
   }
 }
 

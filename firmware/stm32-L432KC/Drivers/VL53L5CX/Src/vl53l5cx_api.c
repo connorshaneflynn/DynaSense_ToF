@@ -712,7 +712,8 @@ uint8_t vl53l5cx_get_ranging_data(
 	uint8_t status = VL53L5CX_STATUS_OK;
 	union Block_header *bh_ptr;
 	uint16_t header_id, footer_id;
-	uint32_t i, j, msize;
+	uint32_t i, msize;
+	[[maybe_unused]] uint32_t j;
 
 	status |= VL53L5CX_RdMulti(&(p_dev->platform), 0x0,
 			p_dev->temp_buffer, p_dev->data_read_size);
