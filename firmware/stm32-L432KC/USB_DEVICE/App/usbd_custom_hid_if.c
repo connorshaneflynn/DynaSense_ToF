@@ -107,8 +107,6 @@ __ALIGN_BEGIN static uint8_t CUSTOM_HID_ReportDesc_FS[USBD_CUSTOM_HID_REPORT_DES
   0xC0    /*     END_COLLECTION	             */
 };
 
-int size = sizeof(CUSTOM_HID_ReportDesc_FS);
-
 /* USER CODE BEGIN PRIVATE_VARIABLES */
 
 /* USER CODE END PRIVATE_VARIABLES */

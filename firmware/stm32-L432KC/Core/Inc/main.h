@@ -57,7 +57,6 @@ void Error_Handler(void);
 /* USER CODE END EFP */
 
 /* Private defines -----------------------------------------------------------*/
-#define test 10
 #define MCO_Pin GPIO_PIN_0
 #define MCO_GPIO_Port GPIOA
 #define VCP_TX_Pin GPIO_PIN_2
@@ -76,6 +75,8 @@ void Error_Handler(void);
 #define LED_GREEN_GPIO_Port GPIOB
 
 /* USER CODE BEGIN Private defines */
+#define CUSTOM_HID_EPIN_SIZE  64U  // 64 bytes for IN
+#define CUSTOM_HID_EPOUT_SIZE 32U  // 32 Bytes for OUT
 
 /* USER CODE END Private defines */
 
