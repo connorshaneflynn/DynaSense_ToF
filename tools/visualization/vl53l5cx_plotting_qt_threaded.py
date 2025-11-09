@@ -84,21 +84,9 @@ class SerialReader(QtCore.QThread):
             if sensor_ID is not None:
                 self.frame_received.emit(sensor_ID, distances, statuses)
 
-    def read_frame(self):
-        # Sync to header, repeat periodically if failed connection
-        while True:
-            try:
-                if self.ser.read(1) == b'\xAA' and self.ser.read(1) == b'\x55':
-                    break
-            except serial.SerialException as e:
-                print(f"Failed to read from '{SERIAL_PORT}'")
-                time.sleep(1)
-                # try to reconnect
-                try:
-                    self.ser = serial.Serial(self.port, self.baud)
-                except serial.SerialException:
-                    pass
-
+    def read_frame_bytes(self):
+        """Reads the raw bytes from serial and packs them into the frame data.
+        Returns sensor_ID, distances, and statuses."""
         # Read sensor ID
         raw = self.ser.read(1)
         if not raw:
@@ -128,6 +116,23 @@ class SerialReader(QtCore.QThread):
         # statuses = np.array(statuses)
 
         return sensor_ID, distances, statuses
+
+    def read_frame(self):
+        # Sync to header, repeat periodically if failed connection
+        while True:
+            try:
+                if self.ser.read(1) == b'\xAA' and self.ser.read(1) == b'\x55':
+                    break
+            except serial.SerialException as e:
+                print(f"Failed to read from '{SERIAL_PORT}'")
+                time.sleep(1)
+                # try to reconnect
+                try:
+                    self.ser = serial.Serial(self.port, self.baud)
+                except serial.SerialException:
+                    pass
+        return self.read_frame_bytes()
+        
 
     def stop(self):
         self._running = False
