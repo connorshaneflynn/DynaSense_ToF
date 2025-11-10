@@ -8,7 +8,7 @@ from PySide6 import QtWidgets, QtCore
 import pyqtgraph as pg
 from collections import defaultdict, deque
 
-COM = 'CDC'  # HID or CDC
+COM = 'HID'  # HID or CDC
 
 SERIAL_PORT = '/dev/ttyACM1'  # COM4 for USB, COM6 for UART, or /dev/ttyACM* on ubuntu
 BAUD_RATE = 230400
@@ -119,13 +119,12 @@ if __name__ == "__main__":
                 _, data, statuses = CDC_read_frame(dev)
             else:
                 _, data, statuses = HID_read_frame(dev)
-            t_delta = round((time.perf_counter_ns() - t_start) / 1e6, 1)
-            print(t_delta)
-
+            
+            # t_start = time.perf_counter_ns()
             data, statuses = filter_data(data, statuses)
             output_data(data)
-            # delta_time = time.time_ns() - start_time
-            # print(f"\t{delta_time/(1e6):03f}")
+            t_delta = round((time.perf_counter_ns() - t_start) / 1e6, 1)
+            print(t_delta)
             
 
         except KeyboardInterrupt:
