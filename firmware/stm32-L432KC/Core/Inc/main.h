@@ -32,6 +32,9 @@ extern "C" {
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
 
+// sets up HID USB parameters
+#include "usb_config.h"
+
 /* USER CODE END Includes */
 
 /* Exported types ------------------------------------------------------------*/
@@ -75,8 +78,6 @@ void Error_Handler(void);
 #define LED_GREEN_GPIO_Port GPIOB
 
 /* USER CODE BEGIN Private defines */
-#define CUSTOM_HID_EPIN_SIZE  64U  // 64 bytes for IN
-#define CUSTOM_HID_EPOUT_SIZE 32U  // 32 Bytes for OUT
 
 /* USER CODE END Private defines */
 

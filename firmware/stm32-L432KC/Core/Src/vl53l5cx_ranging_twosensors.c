@@ -2,18 +2,20 @@
 
 #include "main.h"
 #include "stm32l4xx_hal_def.h"
-#include "usb_device.h"
+// #include "usb_device.h"
 
 #include <stdbool.h>
 #include <string.h>
 #include <stdio.h>
 
-#include "usbd_def.h"
+#include "usbd_def.h"  // TODO: test if needed
 #include "vl53l5cx_api.h"
 #include <usart.h>
 #include <i2c.h>
 
-#include "usbd_customhid.h"
+#include "usb_app.h"
+
+#include "usbd_customhid.h"  // for usb handle
 extern USBD_HandleTypeDef hUsbDeviceFS;
 
 /* Sensor structures */
@@ -105,7 +107,7 @@ void set_I2C_addresses()
 }
 
 
-void send_measurements(uint8_t sensor_ID, VL53L5CX_ResultsData *results) // int16_t *distances, uint8_t *statuses)
+void send_data(uint8_t sensor_ID, VL53L5CX_ResultsData *results) // int16_t *distances, uint8_t *statuses)
 {
   // all measurements are sent as a single frame over serial
   // distance is 2 bytes, status is one bit and will be packed into bytes
@@ -264,7 +266,7 @@ void run(void)
       //   HAL_GPIO_WritePin(LED_GREEN_GPIO_Port, LED_GREEN_Pin, GPIO_PIN_RESET);
       // }
 
-      send_measurements(1, &Results1);
+      send_data(1, &Results1);
     }
     status = vl53l5cx_check_data_ready(&Dev2, &isReady2);
     if (isReady2)
@@ -280,6 +282,6 @@ void run(void)
       //   HAL_GPIO_WritePin(LED_GREEN_GPIO_Port, LED_GREEN_Pin, GPIO_PIN_RESET);
       // }
 
-      send_measurements(2, &Results2);
+      send_data(2, &Results2);
     }
 }

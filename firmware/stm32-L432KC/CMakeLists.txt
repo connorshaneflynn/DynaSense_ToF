@@ -11,16 +11,21 @@ cmake_minimum_required(VERSION 3.22)
 # Select mode by commenting or value
 # set(MODE "ranging_single")
 set(MODE "ranging_double")
+# set(Mode "hid_latency_test")
 
 # MODE is passed to compiler and source is set
 if(MODE STREQUAL "ranging_single")
     add_compile_definitions(RANGING_SINGLE)
-    set(SRC_SENSOR Core/Src/vl53l5cx_ranging.c)
-    set(INC_SENSOR Core/Inc/ranging)
+    set(SRC_CODE Core/Src/vl53l5cx_ranging.c)
+    set(INC_CODE Core/Inc/ranging)
 elseif(MODE STREQUAL "ranging_double")
     add_compile_definitions(RANGING_DOUBLE)
-    set(SRC_SENSOR Core/Src/vl53l5cx_ranging_twosensors.c)
-    set(INC_SENSOR Core/Inc/ranging_twosensors)
+    set(SRC_CODE Core/Src/vl53l5cx_ranging_twosensors.c)
+    set(INC_CODE Core/Inc/ranging_twosensors)
+elseif(MODE STREQUAL "hid_latency_test")
+    add_compile_definitions(HID_LATENCY_TEST)
+    set(SRC_CODE Core/Src/other/hid_latency_test.c)
+    set(INC_CODE Core/Inc/other)
 else()
     message([FATAL_ERROR] "ERROR: CMake MODE was not set properly")
 endif()
@@ -65,16 +70,20 @@ target_sources(${CMAKE_PROJECT_NAME} PRIVATE
     # Add user sources here
     # main, middleware, drivers, etc. are compiled in cmake/stm32cubemx/CMakeLists.txt
     
-    ${SRC_SENSOR}
+    ${SRC_CODE}
+
     Drivers/VL53L5CX/Src/vl53l5cx_platform.c
-    Drivers/VL53L5CX/Src/vl53l5cx_api.c)
+    Drivers/VL53L5CX/Src/vl53l5cx_api.c
+    
+    Core/Src/usb_app.c
+    )
 
 # Add include paths
 target_include_directories(${CMAKE_PROJECT_NAME} PRIVATE
     # Add user defined include paths
     # main, middleware, drivers, etc. are compiled in cmake/stm32cubemx/CMakeLists.txt
 
-    ${INC_SENSOR}
+    ${INC_CODE}
     Drivers/VL53L5CX/Inc
 
     # copied from cubemx cmakelists.txt so fix include errors

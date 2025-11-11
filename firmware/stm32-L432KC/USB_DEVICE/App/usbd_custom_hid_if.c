@@ -23,6 +23,9 @@
 
 /* USER CODE BEGIN INCLUDE */
 
+#include "usb_config.h"
+#include "usb_app.h"
+
 /* USER CODE END INCLUDE */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -189,6 +192,12 @@ static int8_t CUSTOM_HID_OutEvent_FS(uint8_t event_idx, uint8_t state)
   /* USER CODE BEGIN 6 */
   UNUSED(event_idx);
   UNUSED(state);
+
+  // Casting event_idx back to pointer.
+  uint8_t *buffer = (uint8_t*) ((uint32_t) event_idx);
+  uint8_t len = CUSTOM_HID_EPOUT_SIZE;
+
+  on_hid_data_received(buffer, len);
 
   /* Start next USB packet transfer once data processing is completed */
   USBD_CUSTOM_HID_ReceivePacket(&hUsbDeviceFS);

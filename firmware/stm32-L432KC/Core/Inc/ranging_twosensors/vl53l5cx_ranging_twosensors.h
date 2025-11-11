@@ -44,7 +44,7 @@ void i2c_scan(void);
  * @param distances Pointer to array of distances (mm).
  * @param statuses Pointer to array of target statuses.
  */
-void send_measurements(uint8_t sensor_ID, VL53L5CX_ResultsData *results);
+void send_data(uint8_t sensor_ID, VL53L5CX_ResultsData *results);
 
 /**
  * @brief Initialize the VL53L5CX sensor and start ranging.
