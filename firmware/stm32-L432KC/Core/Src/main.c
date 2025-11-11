@@ -40,6 +40,9 @@
 #ifdef RANGING_DOUBLE
 #include "vl53l5cx_ranging_twosensors.h"
 #endif
+#ifdef HID_LATENCY_TEST
+#include "hid_latency_test.h"
+#endif
 
 /* USER CODE END Includes */
 

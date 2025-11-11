@@ -11,7 +11,7 @@ cmake_minimum_required(VERSION 3.22)
 # Select mode by commenting or value
 # set(MODE "ranging_single")
 set(MODE "ranging_double")
-# set(Mode "hid_latency_test")
+set(MODE "latency")
 
 # MODE is passed to compiler and source is set
 if(MODE STREQUAL "ranging_single")
@@ -22,7 +22,7 @@ elseif(MODE STREQUAL "ranging_double")
     add_compile_definitions(RANGING_DOUBLE)
     set(SRC_CODE Core/Src/vl53l5cx_ranging_twosensors.c)
     set(INC_CODE Core/Inc/ranging_twosensors)
-elseif(MODE STREQUAL "hid_latency_test")
+elseif(MODE STREQUAL "latency")
     add_compile_definitions(HID_LATENCY_TEST)
     set(SRC_CODE Core/Src/other/hid_latency_test.c)
     set(INC_CODE Core/Inc/other)
