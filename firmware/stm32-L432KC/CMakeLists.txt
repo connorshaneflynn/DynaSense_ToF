@@ -10,7 +10,7 @@ cmake_minimum_required(VERSION 3.22)
 # Set MODEs
 # Select mode by commenting or value
 # set(MODE "ranging_single")
-set(MODE "ranging_double")
+# set(MODE "ranging_double")
 set(MODE "latency")
 
 # MODE is passed to compiler and source is set

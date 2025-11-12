@@ -75,17 +75,25 @@ uint8_t initialize(void)
 void run(void)
 {
     /* USER CODE BEGIN 3 */
-    ledMode = VERYFAST;
+    ledMode = SLOW;
     updateLED();
 
-    uint32_t start, end;
+    uint32_t start;
+    uint32_t end;
 
+    [[maybe_unused]] uint8_t status_transmit_usb;
     start = HAL_GetTick();
-    USBD_CUSTOM_HID_SendReport(&hUsbDeviceFS, buffer, sizeof(buffer));
+    status_transmit_usb = USBD_CUSTOM_HID_SendReport(&hUsbDeviceFS, buffer, sizeof(buffer));
 
+    if (status_transmit_usb != 0)
+    {
+      return;
+    }
     // wait for return
     while (1)
     {
+      ledMode = VERYFAST;
+      updateLED();
       if (hid_data_ready)
       {
         break;
