@@ -88,16 +88,16 @@ void run(void)
     {
       if (hid_data_ready)
       {
-        // reset hid receive state
-        hid_data_ready = 0;
-
         break;
       }
     }
     end = HAL_GetTick();
+    
+    // reset hid receive state
+    hid_data_ready = 0;
 
     delta_ms = start - end;
-    update_timing_data(delta_ms);  // writes to buffer
+    update_timing_data(delta_ms / 2);  // writes to buffer
 
     ledMode = OFF;
     updateLED();
