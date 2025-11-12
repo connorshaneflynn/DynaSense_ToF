@@ -5,7 +5,6 @@ Reads sensor data over HID from a single connected STM32.
 #include <iostream>
 #include <vector>
 #include <chrono>
-// #include <hidapi/hidapi.h>
 #include <hidapi/hidapi.h>
 #include <cstdint>
 #include <cstring>
