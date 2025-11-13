@@ -81,6 +81,13 @@ void run(void)
     uint32_t start;
     uint32_t end;
 
+    USBD_CUSTOM_HID_HandleTypeDef *hhid = 
+        (USBD_CUSTOM_HID_HandleTypeDef *)hUsbDeviceFS.pClassData;
+    while (hhid->state != CUSTOM_HID_IDLE) {
+      HAL_Delay(100);
+      return;
+    }
+
     [[maybe_unused]] uint8_t status_transmit_usb;
     start = HAL_GetTick();
     status_transmit_usb = USBD_CUSTOM_HID_SendReport(&hUsbDeviceFS, buffer, sizeof(buffer));
