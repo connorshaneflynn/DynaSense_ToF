@@ -74,6 +74,11 @@
 
 /* USER CODE BEGIN PRIVATE_DEFINES */
 
+// redefine product strin to use as indentifier
+// (did not work in cubemx)
+#undef USBD_PRODUCT_STRING_FS
+#define USBD_PRODUCT_STRING_FS "STM32 ToF"
+
 /* USER CODE END PRIVATE_DEFINES */
 
 /**
