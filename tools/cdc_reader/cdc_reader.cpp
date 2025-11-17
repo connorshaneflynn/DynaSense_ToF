@@ -14,14 +14,13 @@
 
 /* CONFIGURATION */
 
-constexpr const char* SERIAL_PORT = "/dev/ttyACM1";
 constexpr int BAUD_RATE = 230400;
 constexpr int RESOLUTION = 16;
 constexpr int FRAME_SIZE = 2 + 1 + RESOLUTION * 2 + RESOLUTION;
-constexpr int PLOT_INDICES[] = {5};
+constexpr std::array<int, 1> PLOT_INDICES = {5};
 
 constexpr size_t DATA_N         = 16;   // Num measurements per frame
-constexpr size_t NUM_DEVICES    = 2;    // TODO: change to auto detect
+constexpr size_t NUM_DEVICES    = 1;    // TODO: change to auto detect
 
 // TODO: it should auto detect number of MCUs and also number of sensors per MCU (can be different per MCU)
 
@@ -40,17 +39,37 @@ struct SensorFrame {
 struct SensorBuffer {
     SensorFrame frames[2];      // two frame buffers: one active, one being written
     std::atomic<int> active{0}; // index of currently active frame (0 or 1)
+
+    /* All below is needed because atomic deletes copy ops. temporary: should not be needed without double buffering*/
+    SensorBuffer() = default;
+
+    // Move constructor
+    SensorBuffer(SensorBuffer&& other) noexcept {
+        frames[0] = other.frames[0];
+        frames[1] = other.frames[1];
+        active.store(other.active.load(std::memory_order_relaxed), std::memory_order_relaxed);
+    }
+
+    // Move assignment
+    SensorBuffer& operator=(SensorBuffer&& other) noexcept {
+        if (this != &other) {
+            frames[0] = other.frames[0];
+            frames[1] = other.frames[1];
+            active.store(other.active.load(std::memory_order_relaxed), std::memory_order_relaxed);
+        }
+        return *this;
+    }
 };
 
 // Shared Data Struct for all sensors in one object for *internal* handling.
-// No atomics, double buffering etc.
 struct SharedData {
-    std::array<SensorBuffer, NUM_DEVICES> devs;
+    std::vector<SensorBuffer> devs;
 };
 
 // Data struct for all sensors in one object for *external* handling
+// No atomics, double buffering etc.
 struct Snapshot {
-    std::array<SensorFrame, NUM_DEVICES> devs;
+    std::vector<SensorFrame> sensor_frames; // TODO remove array specific code everywhere where used
 };
 
 // Device Struct for each serial device
@@ -63,9 +82,50 @@ struct SerialDevice {
 
 /* SERIAL HANDLING */
 
+// Auto detects CDC devices per Product String (Default "STM32 ToF")
+// Opens all detected devices and returns a vector of sp_port*
+// Returns an empty vector if no devices were found
+// Ports need to be closed before exiting program
+std::vector<sp_port*> get_and_open_devices(std::string product_match = "STM32 ToF") {
+    std::vector<sp_port*> found_devices;
+
+    // Gather all ports
+    sp_port **all_ports;
+    if (sp_list_ports(&all_ports) != SP_OK) {
+        std::cerr << "Could not find any USB ports\n";
+        return found_devices;
+    }
+
+    // Find matching devices
+    for (int i = 0; all_ports[i] != nullptr; i++) {
+        const char* product = sp_get_port_usb_product(all_ports[i]);
+        if (product && product == product_match) {
+            // Save port
+            sp_port* dev = nullptr;
+            sp_copy_port(all_ports[i], &dev);
+            // Open port
+            if (sp_open(dev,SP_MODE_READ_WRITE) != SP_OK) {
+                // free port
+                std::cerr << "ERROR: Could not open port " << sp_get_port_name(dev) << std::endl;
+                sp_free_port(dev);
+                continue;
+            }
+            found_devices.push_back(dev);
+        }
+    }
+    sp_free_port_list(all_ports);
+
+    if (found_devices.empty()) {
+        std::cout << "No USB ports found with product string: " << product_match << std::endl;
+    } else {
+        std::cout << "Found " << found_devices.size() << " devices\n";
+    }
+    return found_devices;
+}
+
 // Opens the given serial port and sets it up.
 // Returns a ptr to the port if successfull, else nullptr.
-sp_port* open_serial_port(const char* port_name, int baud) {
+sp_port* open_serial_port_by_name(const char* port_name, int baud) {
     sp_port* port = nullptr;
     if (sp_get_port_by_name(port_name, &port) != SP_OK) {
         std::cerr << "ERROR: Port not found: " << port_name << std::endl;
@@ -157,15 +217,16 @@ void update_sensor(SensorBuffer& buf,
 
 // Retrieve newest data.
 // Only contains data and status per device, no double buffering implementations.
-Snapshot get_latest_data(const SharedData& shared) {
+Snapshot get_latest_data(SharedData& shared) {
     Snapshot snap;
+    snap.sensor_frames.resize(shared.devs.size());
 
-    for (int i = 0; i < NUM_DEVICES; ++i) {
+    for (int i = 0; i < shared.devs.size(); i++) {
         const SensorBuffer& buf = shared.devs[i];
 
         // Extract active data buffer
         int idx = buf.active.load(std::memory_order_acquire);
-        snap.devs[i] = buf.frames[idx];
+        snap.sensor_frames[i] = buf.frames[idx];
     }
     return snap;
 }
@@ -173,7 +234,7 @@ Snapshot get_latest_data(const SharedData& shared) {
 
 // Replaces invalid measurement values at PLOT_INDICES with -1.
 void filter_data(std::array<uint16_t, DATA_N>& data, const std::array<uint8_t, DATA_N>& status) {
-    for (int i = 0; i < 4; ++i) {
+    for (int i = 0; i < PLOT_INDICES.size(); ++i) {
         int idx = PLOT_INDICES[i];
         if (!(status[idx] == 5 || status[idx] == 9 || status[idx] == 10)) {
             data[idx] = static_cast<uint16_t>(-1);
@@ -206,9 +267,9 @@ void read_process_frame(sp_port* port, SensorFrame *frame_ptr) {
 std::atomic<bool> running{true};
 // Iterates through all devices and reads blocking, then updates data in shared data struct.
 // TODO: add check for sp_waiting and read nonblocking
-void run_all_devices(std::array<SerialDevice, NUM_DEVICES>& devices, SharedData& shared) {
+void run_all_devices(std::vector<SerialDevice>& devices, SharedData& shared) {
     while (running) {
-        for (int i = 0; i < NUM_DEVICES; i++) {
+        for (int i = 0; i < devices.size(); i++) {
             SensorFrame frame;
             if (!read_frame(devices[i].port, &frame)) continue;
             update_sensor(shared.devs[i], frame.data.data(), frame.status.data());
@@ -219,31 +280,21 @@ void run_all_devices(std::array<SerialDevice, NUM_DEVICES>& devices, SharedData&
 
 int main()
 {
-    // object to store serial devices
-    std::array<SerialDevice, NUM_DEVICES> serial_devices;
+    // Find devices and store port handles
+    std::vector<sp_port*> dev_ports = get_and_open_devices();
+    if (dev_ports.empty()) return 1;
 
-    // serial paths to initialize devices
-    constexpr std::array<const char*, NUM_DEVICES> serial_paths = {
-        "/dev/ttyACM1",
-        "/dev/ttyACM2"
-    };
-
-    // open devices and store the handles
-    for (int i = 0; i < NUM_DEVICES; i++) {
-        const char* path = serial_paths[i];
-        sp_port* port = open_serial_port(path, BAUD_RATE);
-        if (port) {
-            serial_devices[i].port = port;
-            serial_devices[i].name = path;
-            serial_devices[i].valid = true;
-        } else {
-            std::cerr << "Failed to open serial device " << path << std::endl;
-            return 1;
-        }
+    // Store found devices
+    std::vector<SerialDevice> serial_devices;
+    for (int i = 0; i < dev_ports.size(); i++) {
+        // SerialDevice field: name, port, valid
+        SerialDevice dev {sp_get_port_name(dev_ports[i]), dev_ports[i], true};
+        serial_devices.push_back(dev);  // (could also use emplace_back)
     }
 
     // object to store sensor data
     SharedData shared;
+    shared.devs.resize(serial_devices.size());
 
     std::thread t(run_all_devices, std::ref(serial_devices), std::ref(shared));
 
@@ -255,7 +306,7 @@ int main()
         for (int i = 0; i < NUM_DEVICES; i++) {
             std::cout << i << ":\t";
             for (int idx : PLOT_INDICES) {
-                std::cout << snap.devs[i].data[idx] << "  ";
+                std::cout << snap.sensor_frames[i].data[idx] << "  ";
             }
         }
         std::cout << std::endl;
@@ -267,6 +318,13 @@ int main()
     running = false;
     t.join();
 
+    // close devices
+    for (int i = 0; i < dev_ports.size(); i++) {
+        sp_close(dev_ports[i]);
+        sp_free_port(dev_ports[i]);
+    }
+
+    std::cout << "Closed all Ports\n";
     return 0;
 }
 
