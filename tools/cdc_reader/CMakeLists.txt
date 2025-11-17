@@ -23,11 +23,32 @@ target_include_directories(${CMAKE_PROJECT_NAME} PRIVATE
 find_path(SP_INCLUDE_DIR libserialport.h)
 find_library(SP_LIBRARY serialport)
 
-target_include_directories(cdc_reader PRIVATE
+target_include_directories(${CMAKE_PROJECT_NAME} PRIVATE
     ${SP_INCLUDE_DIR}
 )
 
-target_link_libraries(cdc_reader PRIVATE
+target_link_libraries(${CMAKE_PROJECT_NAME} PRIVATE
     ${SP_LIBRARY}
 )
 
+
+# UTILS
+# temp compile of other files
+set(FNAME list_cdc_devices)
+# Create Executable
+add_executable(${FNAME} utils/list_cdc_devices.cpp)
+
+# Include directory for your own headers
+target_include_directories(${FNAME} PRIVATE
+    # ${CMAKE_SOURCE_DIR}/inc
+)
+
+
+# Packages
+target_include_directories(${FNAME} PRIVATE
+    ${SP_INCLUDE_DIR}
+)
+
+target_link_libraries(${FNAME} PRIVATE
+    ${SP_LIBRARY}
+)
