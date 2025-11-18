@@ -24,6 +24,9 @@ constexpr size_t NUM_DEVICES    = 1;    // TODO: change to auto detect
 
 // TODO: it should auto detect number of MCUs and also number of sensors per MCU (can be different per MCU)
 
+/* MUTEX LOCK */
+// TODO: this will be moved to a class property
+std::mutex shareddata_mtx;
 
 /* STRUCTS */
 
@@ -35,41 +38,9 @@ struct SensorFrame {
     uint64_t seq = 0;                       // sequence counter, maybe remove (TODO)
 };
 
-// Sensor Struct with double buffer
-struct SensorBuffer {
-    SensorFrame frames[2];      // two frame buffers: one active, one being written
-    std::atomic<int> active{0}; // index of currently active frame (0 or 1)
-
-    /* All below is needed because atomic deletes copy ops. temporary: should not be needed without double buffering*/
-    SensorBuffer() = default;
-
-    // Move constructor
-    SensorBuffer(SensorBuffer&& other) noexcept {
-        frames[0] = other.frames[0];
-        frames[1] = other.frames[1];
-        active.store(other.active.load(std::memory_order_relaxed), std::memory_order_relaxed);
-    }
-
-    // Move assignment
-    SensorBuffer& operator=(SensorBuffer&& other) noexcept {
-        if (this != &other) {
-            frames[0] = other.frames[0];
-            frames[1] = other.frames[1];
-            active.store(other.active.load(std::memory_order_relaxed), std::memory_order_relaxed);
-        }
-        return *this;
-    }
-};
-
 // Shared Data Struct for all sensors in one object for *internal* handling.
 struct SharedData {
-    std::vector<SensorBuffer> devs;
-};
-
-// Data struct for all sensors in one object for *external* handling
-// No atomics, double buffering etc.
-struct Snapshot {
-    std::vector<SensorFrame> sensor_frames; // TODO remove array specific code everywhere where used
+    std::vector<SensorFrame> sensors;
 };
 
 // Device Struct for each serial device
@@ -123,30 +94,6 @@ std::vector<sp_port*> get_and_open_devices(std::string product_match = "STM32 To
     return found_devices;
 }
 
-// Opens the given serial port and sets it up.
-// Returns a ptr to the port if successfull, else nullptr.
-sp_port* open_serial_port_by_name(const char* port_name, int baud) {
-    sp_port* port = nullptr;
-    if (sp_get_port_by_name(port_name, &port) != SP_OK) {
-        std::cerr << "ERROR: Port not found: " << port_name << std::endl;
-        return nullptr;
-    }
-    if (sp_open(port,SP_MODE_READ_WRITE) != SP_OK) {
-        std::cerr << "ERROR: Could not open port\n";
-        sp_free_port(port);
-        return nullptr;
-    }
-    sp_set_baudrate(port, baud);
-    sp_set_bits(port, 8);
-    sp_set_parity(port, SP_PARITY_NONE);
-    sp_set_stopbits(port, 1);
-    sp_set_flowcontrol(port, SP_FLOWCONTROL_NONE);
-
-    std::cout << "Opened port " << port_name << " succesfully\n";
-
-    return port;
-}
-
 // Reads n bytes into buf from port.
 // Blocks until read n bytes.
 bool read_exact(sp_port* port, uint8_t* buf, size_t n) {
@@ -195,40 +142,25 @@ bool read_frame(sp_port* port, SensorFrame* frame_ptr) {
 
 /* OTHER */
 
-// Independant update of each sensor data
-void update_sensor(SensorBuffer& buf,
+// Independant update of each sensor object
+void update_sensor(SensorFrame& frame,
                    const uint16_t* newData,
                    const uint8_t* newStatus) {
-
-    // Determine write index
-    int cur = buf.active.load(std::memory_order_relaxed);
-    int nxt = 1 - cur;
-
-    // Write to inactive frame
-    SensorFrame& f = buf.frames[nxt];
-    std::memcpy(f.data.data(), newData, DATA_N * 2); // each value is 2 bytes
-    std::memcpy(f.status.data(), newStatus, DATA_N);
-    f.seq++;  // Optional, to keep track of updates
-
-    // Publish new data
-    buf.active.store(nxt, std::memory_order_release);
+                    
+    std::lock_guard<std::mutex> lock(shareddata_mtx);
+    std::memcpy(frame.data.data(), newData, DATA_N * 2); // each value is 2 bytes
+    std::memcpy(frame.status.data(), newStatus, DATA_N);
+    frame.seq++;  // Optional, to keep track of updates
 }
 
 
 // Retrieve newest data.
 // Only contains data and status per device, no double buffering implementations.
-Snapshot get_latest_data(SharedData& shared) {
-    Snapshot snap;
-    snap.sensor_frames.resize(shared.devs.size());
-
-    for (int i = 0; i < shared.devs.size(); i++) {
-        const SensorBuffer& buf = shared.devs[i];
-
-        // Extract active data buffer
-        int idx = buf.active.load(std::memory_order_acquire);
-        snap.sensor_frames[i] = buf.frames[idx];
-    }
-    return snap;
+void get_latest_data(SharedData& shared, SharedData& snapshot) {
+    // replaces old snapshot with newest data using deep copy
+    // TODO: check that actualy real copy
+    std::lock_guard<std::mutex> lock(shareddata_mtx);
+    snapshot = shared;
 }
 
 
@@ -272,7 +204,7 @@ void run_all_devices(std::vector<SerialDevice>& devices, SharedData& shared) {
         for (int i = 0; i < devices.size(); i++) {
             SensorFrame frame;
             if (!read_frame(devices[i].port, &frame)) continue;
-            update_sensor(shared.devs[i], frame.data.data(), frame.status.data());
+            update_sensor(shared.sensors[i], frame.data.data(), frame.status.data());
         }
     }
 }
@@ -294,19 +226,23 @@ int main()
 
     // object to store sensor data
     SharedData shared;
-    shared.devs.resize(serial_devices.size());
+    shared.sensors.resize(serial_devices.size());
+
+    // object to store snapshot of sensor data
+    SharedData snapshot;
+    snapshot.sensors.resize(serial_devices.size());
 
     std::thread t(run_all_devices, std::ref(serial_devices), std::ref(shared));
 
     for (int i = 0; i < 500; i++) {
         // read snapshot
-        Snapshot snap = get_latest_data(shared);
+        get_latest_data(shared, snapshot);
 
         // print some measurements
         for (int i = 0; i < NUM_DEVICES; i++) {
             std::cout << i << ":\t";
             for (int idx : PLOT_INDICES) {
-                std::cout << snap.sensor_frames[i].data[idx] << "  ";
+                std::cout << snapshot.sensors[i].data[idx] << "  ";
             }
         }
         std::cout << std::endl;
