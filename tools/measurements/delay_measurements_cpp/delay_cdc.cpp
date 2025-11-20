@@ -12,6 +12,11 @@ constexpr int RESOLUTION = 16;
 constexpr int FRAME_SIZE = 2 + 1 + RESOLUTION * 2 + RESOLUTION;
 constexpr int PLOT_INDICES[] = {5, 6, 9, 10};
 
+
+/* 
+Opens the given serial port and sets it up.
+Returns a ptr to the port if successfull, else nullptr.
+*/
 sp_port* open_serial_port(const char* port_name, int baud) {
     sp_port* port = nullptr;
     if (sp_get_port_by_name(port_name, &port) != SP_OK) {
@@ -28,9 +33,16 @@ sp_port* open_serial_port(const char* port_name, int baud) {
     sp_set_parity(port, SP_PARITY_NONE);
     sp_set_stopbits(port, 1);
     sp_set_flowcontrol(port, SP_FLOWCONTROL_NONE);
+
+    std::cout << "Opened port " << port_name << " succesfully\n";
+
     return port;
 }
 
+/*
+Reads n bytes into buf from port.
+Blocks until read n bytes.
+*/
 bool read_exact(sp_port* port, uint8_t* buf, size_t n) {
     size_t total = 0;
     while (total < n) {
@@ -41,6 +53,10 @@ bool read_exact(sp_port* port, uint8_t* buf, size_t n) {
     return true;
 }
 
+/*
+Searches for starting header in stream of port.
+Blocks until found and returns true or false if no bytes available.
+*/
 bool sync_to_header(sp_port* port) {
     uint8_t b1, b2;
     while (true) {
@@ -52,6 +68,10 @@ bool sync_to_header(sp_port* port) {
     }
 }
 
+/*
+Reads a full frame from port and saves data in given buffers.
+Blocks until synced.
+*/
 bool read_frame(sp_port* port, uint8_t& sensor_ID,
                 std::vector<uint16_t>& distances,
                 std::vector<uint8_t>& statuses) {
@@ -72,6 +92,9 @@ bool read_frame(sp_port* port, uint8_t& sensor_ID,
     return true;
 }
 
+/*
+Replaces invalid measurement values with -1.
+*/
 void filter_data(std::vector<uint16_t>& data,
                  const std::vector<uint8_t>& statuses) {
     for (int i = 0; i < 4; ++i) {
