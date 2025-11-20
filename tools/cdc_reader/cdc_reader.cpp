@@ -24,10 +24,6 @@ constexpr size_t NUM_DEVICES    = 1;    // TODO: change to auto detect
 
 // TODO: it should auto detect number of MCUs and also number of sensors per MCU (can be different per MCU)
 
-/* MUTEX LOCK */
-// TODO: this will be moved to a class property
-std::mutex shareddata_mtx;
-
 /* STRUCTS */
 
 // Sensor Struct
@@ -145,9 +141,10 @@ bool read_frame(sp_port* port, SensorFrame* frame_ptr) {
 // Independant update of each sensor object
 void update_sensor(SensorFrame& frame,
                    const uint16_t* newData,
-                   const uint8_t* newStatus) {
+                   const uint8_t* newStatus,
+                   std::mutex& mutex) {
                     
-    std::lock_guard<std::mutex> lock(shareddata_mtx);
+    std::lock_guard<std::mutex> lock(mutex);
     std::memcpy(frame.data.data(), newData, DATA_N * 2); // each value is 2 bytes
     std::memcpy(frame.status.data(), newStatus, DATA_N);
     frame.seq++;  // Optional, to keep track of updates
@@ -156,11 +153,13 @@ void update_sensor(SensorFrame& frame,
 
 // Retrieve newest data.
 // Only contains data and status per device, no double buffering implementations.
-void get_latest_data(SharedData& shared, SharedData& snapshot) {
+void get_latest_data(SharedData& shared, SharedData& snapshot, std::vector<std::mutex> &mutexes) {
     // replaces old snapshot with newest data using deep copy
     // TODO: check that actualy real copy
-    std::lock_guard<std::mutex> lock(shareddata_mtx);
-    snapshot = shared;
+    for (size_t i = 0; i < shared.sensors.size(); ++i) {
+        std::lock_guard<std::mutex> lock(mutexes[i]);
+        snapshot.sensors[i] = shared.sensors[i];
+    }
 }
 
 
@@ -175,36 +174,16 @@ void filter_data(std::array<uint16_t, DATA_N>& data, const std::array<uint8_t, D
 }
 // TODO: check and change this function
 
-// Read a full frame (blocking), filters and prints it.
-void read_process_frame(sp_port* port, SensorFrame *frame_ptr) {
-    auto t_start = std::chrono::high_resolution_clock::now();
-
-    if (!read_frame(port, frame_ptr)) {
-        std::cerr << "Failed to read frame\n";
-        sp_drain(port);
-        std::this_thread::sleep_for(std::chrono::milliseconds(100));
-        return;
-    }
-
-    filter_data(frame_ptr->data, frame_ptr->status);
-
-    for (int idx : PLOT_INDICES)
-        std::cout << frame_ptr->data[idx] << " ";
-
-    auto t_end = std::chrono::high_resolution_clock::now();
-    double delta_ms = std::chrono::duration<double, std::milli>(t_end - t_start).count();
-    std::cout << "     (" << delta_ms << " ms)\n";
-}
 
 std::atomic<bool> running{true};
 // Iterates through all devices and reads blocking, then updates data in shared data struct.
 // TODO: add check for sp_waiting and read nonblocking
-void run_all_devices(std::vector<SerialDevice>& devices, SharedData& shared) {
+void run_all_devices(std::vector<SerialDevice>& devices, SharedData& shared, std::vector<std::mutex>& mutexes) {
     while (running) {
         for (int i = 0; i < devices.size(); i++) {
             SensorFrame frame;
             if (!read_frame(devices[i].port, &frame)) continue;
-            update_sensor(shared.sensors[i], frame.data.data(), frame.status.data());
+            update_sensor(shared.sensors[i], frame.data.data(), frame.status.data(), mutexes[i]);
         }
     }
 }
@@ -224,6 +203,10 @@ int main()
         serial_devices.push_back(dev);  // (could also use emplace_back)
     }
 
+    // create mutexes for sensor objects
+    // TODO: this will be moved to a class property
+    std::vector<std::mutex> sensor_mtxs(serial_devices.size());
+
     // object to store sensor data
     SharedData shared;
     shared.sensors.resize(serial_devices.size());
@@ -232,11 +215,11 @@ int main()
     SharedData snapshot;
     snapshot.sensors.resize(serial_devices.size());
 
-    std::thread t(run_all_devices, std::ref(serial_devices), std::ref(shared));
+    std::thread t(run_all_devices, std::ref(serial_devices), std::ref(shared), std::ref(sensor_mtxs));
 
     for (int i = 0; i < 500; i++) {
         // read snapshot
-        get_latest_data(shared, snapshot);
+        get_latest_data(shared, snapshot, sensor_mtxs);
 
         // print some measurements
         for (int i = 0; i < NUM_DEVICES; i++) {
