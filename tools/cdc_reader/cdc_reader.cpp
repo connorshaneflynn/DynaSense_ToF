@@ -21,6 +21,7 @@ constexpr std::array<int, 1> PLOT_INDICES = {5};
 
 constexpr size_t DATA_N         = 16;   // Num measurements per frame
 constexpr size_t NUM_DEVICES    = 1;    // TODO: change to auto detect
+static constexpr std::array<uint8_t, 2> header = {0xAA, 0x55};
 
 // TODO: it should auto detect number of MCUs and also number of sensors per MCU (can be different per MCU)
 
@@ -44,6 +45,7 @@ struct SerialDevice {
     std::string name;
     sp_port* port;
     bool valid = false;
+    std::vector<uint8_t> rx_buf;
 };
 
 
@@ -90,122 +92,152 @@ std::vector<sp_port*> get_and_open_devices(std::string product_match = "STM32 To
     return found_devices;
 }
 
-// Reads n bytes into buf from port.
-// Blocks until read n bytes or timeout (1ms) reached.
-bool read_exact(sp_port* port, uint8_t* buf, size_t n) {
-    size_t total = 0;
-    while (total < n) {
-        int r = sp_blocking_read(port, buf + total, n - total, 10);
-        if (r <= 0) return false;
-        total += r;
-    }
-    return true;
-}
-//TODO: change this function. make nonblocking with sp_input_waiting and non blocking read
+// // Reads n bytes into buf from port.
+// // Blocks until read n bytes or timeout (1ms) reached.
+// bool read_exact(sp_port* port, uint8_t* buf, size_t n) {
+//     size_t total = 0;
+//     while (total < n) {
+//         int r = sp_blocking_read(port, buf + total, n - total, 10);
+//         if (r <= 0) return false;
+//         total += r;
+//     }
+//     return true;
+// }
+// //TODO: change this function. make nonblocking with sp_input_waiting and non blocking read
 
 
-// Searches for starting header in stream of port.
-// Blocks until found and returns true or false if no bytes available.
-bool sync_to_header(sp_port* port) {
-    uint8_t b1{0x00};
-    uint8_t b2{0x00};
-    int num_failed{0};
-    // while (true) {
-    //     if (b1 != 0xAA and !read_exact(port, &b1, 1)) return false;
-    //     if (b1 == 0xAA) {
-    //         if (!read_exact(port, &b2, 1)) return false;
-    //         if (b2 == 0x55) return true;
-    //         if (b2 == 0xAA) b1 = 0xAA;
-    //     }
-    // }
+// // Searches for starting header in stream of port.
+// // Blocks until found and returns true or false if no bytes available.
+// bool sync_to_header(sp_port* port) {
+//     uint8_t b1{0x00};
+//     uint8_t b2{0x00};
+//     int num_failed{0};
+//     // while (true) {
+//     //     if (b1 != 0xAA and !read_exact(port, &b1, 1)) return false;
+//     //     if (b1 == 0xAA) {
+//     //         if (!read_exact(port, &b2, 1)) return false;
+//     //         if (b2 == 0x55) return true;
+//     //         if (b2 == 0xAA) b1 = 0xAA;
+//     //     }
+//     // }
 
+//     while (true) {
+//         if (num_failed != 0) std::cout << "syncing " << num_failed << std::endl;
+//         num_failed++;
+        
+//         if (!read_exact(port, &b1, 1)) return false;  // failed to read byte
+//         if (b1 != 0xAA) continue;  // continue reading 1 byte at a time
+        
+//         if (!read_exact(port, &b2, 1)) return false; // failed to read byte
+//         if (b2 == 0x55) return true; // found 0xAA, 0x55
+
+//         if (b2 != 0xAA) continue;
+//         while (true) {
+//             if (!read_exact(port, &b2, 1)) return false; // failed to read byte
+//             if (b2 == 0x55) return true; // found 0xAA, 0x55
+//             if (b2 == 0xAA) continue;  // 0xAA, 0x55 still possible
+//             // else not possible
+//             break;  // continue search for 0xAA as b1
+//         }
+//     }
+//     // TODO: check which logic to use and simplify
+// }
+
+// Drains the OS CDC buffer into a user-space device buffer
+// This allows for better data parsing and consistency
+// Returns false if no new data in stream
+bool read_into_buffer(SerialDevice& dev) {
+    // check for new data
+    // int waiting = sp_input_waiting(dev.port);
+    // std::cout << "CDC waiting:\t" << waiting << std::endl;
+    // std::cout.flush();
+
+    if (sp_input_waiting(dev.port) < FRAME_SIZE) return false;
+    // temporary storage to read stream in chunks
+    uint8_t tmp[256];  // in normal state max FRAME_SIZE (51) bytes will be waiting in buffer
+
+    // read stream in tmp chunks and save to device buffer
     while (true) {
-        if (num_failed != 0) std::cout << "syncing " << num_failed << std::endl;
-        num_failed++;
-        
-        if (!read_exact(port, &b1, 1)) return false;  // failed to read byte
-        if (b1 != 0xAA) continue;  // continue reading 1 byte at a time
-        
-        if (!read_exact(port, &b2, 1)) return false; // failed to read byte
-        if (b2 == 0x55) return true; // found 0xAA, 0x55
+        int n = sp_nonblocking_read(dev.port, tmp, sizeof(tmp));
+        if (n <= 0) break;  // no more bytes in stream
+        dev.rx_buf.insert(dev.rx_buf.end(), tmp, tmp+n);
+    }
+    return true;
+}
 
-        if (b2 != 0xAA) continue;
-        while (true) {
-            if (!read_exact(port, &b2, 1)) return false; // failed to read byte
-            if (b2 == 0x55) return true; // found 0xAA, 0x55
-            if (b2 == 0xAA) continue;  // 0xAA, 0x55 still possible
-            // else not possible
-            break;  // continue search for 0xAA as b1
+bool get_latest_frame(SerialDevice& dev, SensorFrame& frame) {
+    std::vector<uint8_t>& rx = dev.rx_buf;
+
+    // std::cout << "rx buf size:\t" << rx.size() << std::endl;
+    // std::cout.flush();
+    if (rx.size() < FRAME_SIZE) return false;
+
+    ssize_t idx = rx.size() - FRAME_SIZE;  // earliest possible header idx, negative if to little bytes
+    ssize_t latest_frame_idx = -1;  // idx of newest header found
+
+    // search for headers in reverse until buffer is drained
+    // skipped if rx too small
+    while (idx >= 0) {
+        std::cout.flush();
+        if (rx[idx] == header[0] && rx[idx + 1] == header[1]) {
+            // check if complete frame available
+            if (idx + FRAME_SIZE <= rx.size()) {
+                latest_frame_idx = idx;
+                break;
+            }
         }
+        --idx;
+        // std::cout << "syncing\n";
+        // std::cout.flush();
     }
-    // TODO: check which logic to use and simplify
-}
 
-// Reads a full frame from port and saves data in given buffers.
-// Blocks until synced or timeout reached.
-bool read_frame(sp_port* port, SensorFrame* frame_ptr) {
-    if (!sync_to_header(port)) return false;
+    // drained buffer and no complete frame found
+    // This should only happen if data was warbled
+    // TODO: could delete data up to found header if existing
+    if (latest_frame_idx < 0) {
+        // std::cout << "no full frame in buffer of size " << rx.size() << std::endl;
+        // std::cout.flush();
+        return false;
+    }
 
-    std::vector<uint8_t> packet(FRAME_SIZE - 2);
-    if (!read_exact(port, packet.data(), packet.size())) return false;
-
-    frame_ptr->sensor_ID = packet[0];
-
+    // copy data into frame
+    idx = static_cast<size_t>(latest_frame_idx) + 2;  // header bytes
+    frame.sensor_ID = rx[idx]; // ID byte
+    idx += 1;
     for (int i = 0; i < DATA_N; ++i) {
-        frame_ptr->data[i] = packet[1 + i * 2] | (packet[1 + i * 2 + 1] << 8);
-    }
+        uint16_t lo = rx[idx + i*2];
+        uint16_t hi = rx[idx + i*2 + 1];
+        frame.data[i] = static_cast<uint16_t>(lo | (hi << 8));
+    } // data bytes
+    idx += 2 * DATA_N;
+    std::memcpy(frame.status.data(), &rx[idx], DATA_N); // status bytes
+    // TODO: maybe into separate function
 
-    std::memcpy(frame_ptr->status.data(), &packet[1 + DATA_N * 2], DATA_N);
+    rx.erase(rx.begin(), rx.begin() + static_cast<size_t>(latest_frame_idx) + FRAME_SIZE);
+
     return true;
 }
 
-// Reads a full frame from port and saves data in given buffers.
-// Returns true if successful frame read
-// Returns false if no frame available or syncing failed
-bool read_frame_nonblocking(sp_port* port, SensorFrame* frame_ptr) {
-    // Check if enough bytes for a full frame are available
-    if (sp_input_waiting(port) < FRAME_SIZE) return false;
-
-    // temp check to see buffer overflow
-    if (sp_input_waiting(port) > FRAME_SIZE + 40) {
-        std::cout << "More than one frame in buffer\n";
-    }
-
-    // Try to sync to start header
-    if (!sync_to_header(port)) return false;
-
-    std::vector<uint8_t> packet(FRAME_SIZE - 2);
-    if (!read_exact(port, packet.data(), packet.size())) return false;
-
-    frame_ptr->sensor_ID = packet[0];
-
-    for (int i = 0; i < DATA_N; ++i) {
-        frame_ptr->data[i] = packet[1 + i * 2] | (packet[1 + i * 2 + 1] << 8);
-    }
-
-    std::memcpy(frame_ptr->status.data(), &packet[1 + DATA_N * 2], DATA_N);
-    return true;
-}
 
 
 /* OTHER */
 
 // Independant update of each sensor object
-void update_sensor(SensorFrame& frame,
-                   const uint16_t* newData,
-                   const uint8_t* newStatus,
+void update_sensor(SensorFrame& sensor_frame,
+                   SensorFrame& new_frame,
                    std::mutex& mutex) {
                     
     std::lock_guard<std::mutex> lock(mutex);
-    std::memcpy(frame.data.data(), newData, DATA_N * 2); // each value is 2 bytes
-    std::memcpy(frame.status.data(), newStatus, DATA_N);
-    frame.seq++;  // Optional, to keep track of updates
+    std::memcpy(sensor_frame.data.data(), new_frame.data.data(), DATA_N * 2); // each value is 2 bytes
+    std::memcpy(sensor_frame.status.data(), new_frame.status.data(), DATA_N);
+    sensor_frame.seq++;  // Optional, to keep track of updates
 }
+// TODO: just replace the whole frame instead of updating individual fields
 
 
 // Retrieve newest data.
 // Only contains data and status per device, no double buffering implementations.
-void get_latest_data(SharedData& shared, SharedData& snapshot, std::vector<std::mutex> &mutexes) {
+void get_snapshot(SharedData& shared, SharedData& snapshot, std::vector<std::mutex> &mutexes) {
     // replaces old snapshot with newest data using deep copy
     // TODO: check that actualy real copy
     for (size_t i = 0; i < shared.sensors.size(); ++i) {
@@ -228,17 +260,26 @@ void filter_data(std::array<uint16_t, DATA_N>& data, const std::array<uint8_t, D
 
 
 std::atomic<bool> running{true};
-// Iterates through all devices and reads blocking, then updates data in shared data struct.
-// TODO: add check for sp_waiting and read nonblocking
+// Iterates through all devices, reads in new data from stream, extracts the latest frame, then updates data in shared data struct.
 void run_all_devices(std::vector<SerialDevice>& devices, SharedData& shared, std::vector<std::mutex>& mutexes) {
     // frame object to temp store data
     SensorFrame frame;
 
+    // Flush CDC stream
+    for (auto& dev: devices) {
+        sp_flush(dev.port, SP_BUF_INPUT);
+    }
+
     while (running) {
         for (int i = 0; i < devices.size(); i++) {
-            if (!read_frame_nonblocking(devices[i].port, &frame)) continue;
-            update_sensor(shared.sensors[i], frame.data.data(), frame.status.data(), mutexes[i]);
+            // read OS CDC buffer
+            if (!read_into_buffer(devices[i])) continue;  // no new data
+
+            // extract latest frame and update sensor
+            if (!get_latest_frame(devices[i], frame)) continue;  // no new full frame
+            update_sensor(shared.sensors[i], frame, mutexes[i]);
         }
+        std::this_thread::sleep_for(std::chrono::milliseconds(1));
     }
 }
 
@@ -253,7 +294,8 @@ int main()
     std::vector<SerialDevice> serial_devices;
     for (int i = 0; i < dev_ports.size(); i++) {
         // SerialDevice field: name, port, valid
-        SerialDevice dev {sp_get_port_name(dev_ports[i]), dev_ports[i], true};
+        SerialDevice dev {sp_get_port_name(dev_ports[i]), dev_ports[i], true};  // empty rx_buf
+        dev.rx_buf.reserve(256);
         serial_devices.push_back(dev);  // (could also use emplace_back)
     }
 
@@ -270,10 +312,11 @@ int main()
     snapshot.sensors.resize(serial_devices.size());
 
     std::thread t(run_all_devices, std::ref(serial_devices), std::ref(shared), std::ref(sensor_mtxs));
+    std::this_thread::sleep_for(std::chrono::milliseconds(5));
 
     for (int i = 0; i < 500; i++) {
         // read snapshot
-        get_latest_data(shared, snapshot, sensor_mtxs);
+        get_snapshot(shared, snapshot, sensor_mtxs);
 
         // print some measurements
         for (int i = 0; i < NUM_DEVICES; i++) {
@@ -283,6 +326,7 @@ int main()
             }
         }
         std::cout << std::endl;
+        std::cout.flush();
 
         // run loop at ~50hz
         std::this_thread::sleep_for(std::chrono::milliseconds(20));
