@@ -170,38 +170,22 @@ bool get_latest_frame(SerialDevice& dev, SensorFrame& frame) {
 
     // std::cout << "rx buf size:\t" << rx.size() << std::endl;
     // std::cout.flush();
+
+    // check if enough bytes for a full frame
     if (rx.size() < FRAME_SIZE) return false;
 
-    ssize_t idx = rx.size() - FRAME_SIZE;  // earliest possible header idx, negative if to little bytes
-    ssize_t latest_frame_idx = -1;  // idx of newest header found
-
-    // search for headers in reverse until buffer is drained
-    // skipped if rx too small
-    while (idx >= 0) {
-        std::cout.flush();
-        if (rx[idx] == header[0] && rx[idx + 1] == header[1]) {
-            // check if complete frame available
-            if (idx + FRAME_SIZE <= rx.size()) {
-                latest_frame_idx = idx;
-                break;
-            }
-        }
-        --idx;
-        // std::cout << "syncing\n";
-        // std::cout.flush();
-    }
-
-    // drained buffer and no complete frame found
-    // This should only happen if data was warbled
-    // TODO: could delete data up to found header if existing
-    if (latest_frame_idx < 0) {
-        // std::cout << "no full frame in buffer of size " << rx.size() << std::endl;
-        // std::cout.flush();
-        return false;
+    // most times last FRAME_SIZE bytes will be latest full frame
+    // else search for last header
+    size_t idx = rx.size() - FRAME_SIZE;
+    if (!(rx[idx] == header[0] && rx[idx + 1] == header[1])) {
+        auto it = std::find_end(rx.begin(), rx.end() - FRAME_SIZE,
+                                header.begin(), header.end());
+        if (it == rx.end() - FRAME_SIZE) return false; // no full frame found
+        size_t idx = it - rx.begin();
     }
 
     // copy data into frame
-    idx = static_cast<size_t>(latest_frame_idx) + 2;  // header bytes
+    idx += 2;  // header bytes
     frame.sensor_ID = rx[idx]; // ID byte
     idx += 1;
     for (int i = 0; i < DATA_N; ++i) {
@@ -211,10 +195,10 @@ bool get_latest_frame(SerialDevice& dev, SensorFrame& frame) {
     } // data bytes
     idx += 2 * DATA_N;
     std::memcpy(frame.status.data(), &rx[idx], DATA_N); // status bytes
+    idx += DATA_N;
     // TODO: maybe into separate function
-
-    rx.erase(rx.begin(), rx.begin() + static_cast<size_t>(latest_frame_idx) + FRAME_SIZE);
-
+    
+    rx.erase(rx.begin(), rx.begin() + idx);
     return true;
 }
 
@@ -314,7 +298,7 @@ int main()
     std::thread t(run_all_devices, std::ref(serial_devices), std::ref(shared), std::ref(sensor_mtxs));
     std::this_thread::sleep_for(std::chrono::milliseconds(5));
 
-    for (int i = 0; i < 500; i++) {
+    for (int i = 0; i < 300; i++) {
         // read snapshot
         get_snapshot(shared, snapshot, sensor_mtxs);
 
@@ -344,14 +328,3 @@ int main()
     std::cout << "Closed all Ports\n";
     return 0;
 }
-
-
-
-// Open and store serial device(s) as array of SerialDevice
-// create a SharedData object
-// In a separate thread: iterate through serial devices
-//      Check if new data
-//      Read and publish new data
-// In main loop: display/process data
-//      Read in newest data
-//      print some data or feedback
