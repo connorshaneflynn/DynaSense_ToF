@@ -91,11 +91,11 @@ std::vector<sp_port*> get_and_open_devices(std::string product_match = "STM32 To
 }
 
 // Reads n bytes into buf from port.
-// Blocks until read n bytes.
+// Blocks until read n bytes or timeout (1ms) reached.
 bool read_exact(sp_port* port, uint8_t* buf, size_t n) {
     size_t total = 0;
     while (total < n) {
-        int r = sp_blocking_read(port, buf + total, n - total, 100);
+        int r = sp_blocking_read(port, buf + total, n - total, 10);
         if (r <= 0) return false;
         total += r;
     }
@@ -107,19 +107,71 @@ bool read_exact(sp_port* port, uint8_t* buf, size_t n) {
 // Searches for starting header in stream of port.
 // Blocks until found and returns true or false if no bytes available.
 bool sync_to_header(sp_port* port) {
-    uint8_t b1, b2;
+    uint8_t b1{0x00};
+    uint8_t b2{0x00};
+    int num_failed{0};
+    // while (true) {
+    //     if (b1 != 0xAA and !read_exact(port, &b1, 1)) return false;
+    //     if (b1 == 0xAA) {
+    //         if (!read_exact(port, &b2, 1)) return false;
+    //         if (b2 == 0x55) return true;
+    //         if (b2 == 0xAA) b1 = 0xAA;
+    //     }
+    // }
+
     while (true) {
-        if (!read_exact(port, &b1, 1)) return false;
-        if (b1 == 0xAA) {
-            if (!read_exact(port, &b2, 1)) return false;
-            if (b2 == 0x55) return true;
+        if (num_failed != 0) std::cout << "syncing " << num_failed << std::endl;
+        num_failed++;
+        
+        if (!read_exact(port, &b1, 1)) return false;  // failed to read byte
+        if (b1 != 0xAA) continue;  // continue reading 1 byte at a time
+        
+        if (!read_exact(port, &b2, 1)) return false; // failed to read byte
+        if (b2 == 0x55) return true; // found 0xAA, 0x55
+
+        if (b2 != 0xAA) continue;
+        while (true) {
+            if (!read_exact(port, &b2, 1)) return false; // failed to read byte
+            if (b2 == 0x55) return true; // found 0xAA, 0x55
+            if (b2 == 0xAA) continue;  // 0xAA, 0x55 still possible
+            // else not possible
+            break;  // continue search for 0xAA as b1
         }
     }
+    // TODO: check which logic to use and simplify
 }
 
 // Reads a full frame from port and saves data in given buffers.
-// Blocks until synced.
+// Blocks until synced or timeout reached.
 bool read_frame(sp_port* port, SensorFrame* frame_ptr) {
+    if (!sync_to_header(port)) return false;
+
+    std::vector<uint8_t> packet(FRAME_SIZE - 2);
+    if (!read_exact(port, packet.data(), packet.size())) return false;
+
+    frame_ptr->sensor_ID = packet[0];
+
+    for (int i = 0; i < DATA_N; ++i) {
+        frame_ptr->data[i] = packet[1 + i * 2] | (packet[1 + i * 2 + 1] << 8);
+    }
+
+    std::memcpy(frame_ptr->status.data(), &packet[1 + DATA_N * 2], DATA_N);
+    return true;
+}
+
+// Reads a full frame from port and saves data in given buffers.
+// Returns true if successful frame read
+// Returns false if no frame available or syncing failed
+bool read_frame_nonblocking(sp_port* port, SensorFrame* frame_ptr) {
+    // Check if enough bytes for a full frame are available
+    if (sp_input_waiting(port) < FRAME_SIZE) return false;
+
+    // temp check to see buffer overflow
+    if (sp_input_waiting(port) > FRAME_SIZE + 40) {
+        std::cout << "More than one frame in buffer\n";
+    }
+
+    // Try to sync to start header
     if (!sync_to_header(port)) return false;
 
     std::vector<uint8_t> packet(FRAME_SIZE - 2);
@@ -179,10 +231,12 @@ std::atomic<bool> running{true};
 // Iterates through all devices and reads blocking, then updates data in shared data struct.
 // TODO: add check for sp_waiting and read nonblocking
 void run_all_devices(std::vector<SerialDevice>& devices, SharedData& shared, std::vector<std::mutex>& mutexes) {
+    // frame object to temp store data
+    SensorFrame frame;
+
     while (running) {
         for (int i = 0; i < devices.size(); i++) {
-            SensorFrame frame;
-            if (!read_frame(devices[i].port, &frame)) continue;
+            if (!read_frame_nonblocking(devices[i].port, &frame)) continue;
             update_sensor(shared.sensors[i], frame.data.data(), frame.status.data(), mutexes[i]);
         }
     }
