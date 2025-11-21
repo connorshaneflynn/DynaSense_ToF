@@ -5,6 +5,20 @@ project(cdc_reader VERSION 0.1.0 LANGUAGES C CXX)
 set(CMAKE_CXX_STANDARD 23)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
+
+# # Source files
+# set(SOURCES
+#     cdc_reader_singlefile.cpp
+# )
+
+# # Create Executable
+# add_executable(${CMAKE_PROJECT_NAME} cdc_reader_singlefile.cpp)
+
+# # Include directory for your own headers
+# target_include_directories(${CMAKE_PROJECT_NAME} PRIVATE
+#     # ${CMAKE_SOURCE_DIR}/inc
+# )
+
 # Source files
 set(SOURCES
     cdc_reader.cpp
