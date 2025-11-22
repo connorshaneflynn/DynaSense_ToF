@@ -201,9 +201,8 @@ void CDCReader::update_sensor_(SensorFrame& sensor_frame,
 // TODO: just replace the whole frame instead of updating individual fields
 
 
-// Retrieve newest data.
-// Only contains data and status per device, no double buffering implementations.
-void CDCReader::get_snapshot(SharedData& snapshot) {
+// Updates the CDCReader snapshot with the newest data in SharedData.
+void CDCReader::update_snapshot() {
     // replaces old snapshot with newest data using deep copy
     // TODO: check that actualy real copy
     for (size_t i = 0; i < shared.sensors.size(); ++i) {
@@ -212,13 +211,8 @@ void CDCReader::get_snapshot(SharedData& snapshot) {
     }
 }
 
-
-int main() {
-    CDCReader reader;
-    reader.init();
-    reader.run();
-    
-    reader.stop();
-    return 0;
+// Returns a reference to the CDC object snapshot
+// Same as accesing CDCReader::snapshot directly
+const CDCReader::SharedData& CDCReader::get_snapshot_handle() {
+    return snapshot;
 }
-

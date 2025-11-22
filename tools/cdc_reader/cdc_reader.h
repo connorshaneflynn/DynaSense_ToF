@@ -20,6 +20,7 @@ public:
     static constexpr uint8_t FRAME_SIZE = header.size() + 1 + DATA_N * 2 + DATA_N;
     static constexpr std::string_view PRODUCT_NAME = "STM32 ToF";
 
+    
     /* structs */
 
     // Sensor Struct
@@ -43,6 +44,7 @@ public:
         std::vector<uint8_t> rx_buf;
     };
 
+
     /* constructor / destructor */
 
     explicit CDCReader();  // TODO: add params
@@ -50,13 +52,16 @@ public:
 
     bool init();  // includes get and open devices, store ports in serial_devices, create buffer
 
+
     /* methods */
 
     void run();  // starts the thread and runs the function, (sleeps shortly before returning)
     void stop(); // stops the thread
 
-    void get_snapshot(SharedData& snapshot);
-    // TODO: change this so public function get_snap doesn't require arguments except snap by reference
+    void update_snapshot();
+
+    const SharedData& get_snapshot_handle();
+
 
     /* member variables */
 
@@ -91,7 +96,4 @@ private:
     std::deque<std::mutex> sensor_mtxs;
 
     SharedData shared;
-
-
-
 };
