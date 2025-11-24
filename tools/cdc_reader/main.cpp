@@ -5,7 +5,7 @@
 #include <thread>
 #include <chrono>
 
-static constexpr std::array<uint8_t, 1> PLOT_INDICES {5};
+static constexpr std::array<uint8_t, 1> PLOT_INDICES {3};
 
 void print_snapshot(const CDCReader::SharedData& snap) {
     for (int i = 0; i < snap.sensors.size(); i++) {
@@ -19,7 +19,8 @@ void print_snapshot(const CDCReader::SharedData& snap) {
 }
 
 int main() {
-    CDCReader reader;
+    uint16_t distance_threshold = 1000;
+    CDCReader reader;  //default threshold is max int16_t value
     if (!reader.init()) {
         std::cout << "ERROR: Failed to initialize the CDC reader\n";
         return 1;

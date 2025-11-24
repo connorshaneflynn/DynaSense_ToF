@@ -11,9 +11,13 @@
 
 #include <libserialport.h>
 
-CDCReader::CDCReader() {
-    // maybe include user defined mapping here
+CDCReader::CDCReader(int16_t max_distance)
+    : dist_threshold(max_distance),
+      threshold_repl(max_distance)  // or 32'767: int16_t max value
+{
+    // TODO: include user defined mapping here
 }
+
 
 CDCReader::~CDCReader() {
     // shut down thread
@@ -79,8 +83,10 @@ void CDCReader::run_all_devices_() {
             // read OS CDC buffer
             if (!read_into_buffer_(serial_devices[i])) continue;  // no new data
 
-            // extract latest frame and update sensor
+            // extract latest frame and filter
             if (!get_latest_frame_(serial_devices[i], frame)) continue;  // no new full frame
+            filter_data(frame);
+
             update_sensor_(shared.sensors[i], frame, sensor_mtxs[i]);
         }
         std::this_thread::sleep_for(std::chrono::milliseconds(1));
@@ -175,9 +181,9 @@ bool CDCReader::get_latest_frame_(SerialDevice& dev, SensorFrame& frame) {
     frame.sensor_ID = rx[idx]; // ID byte
     idx += 1;
     for (int i = 0; i < DATA_N; ++i) {
-        uint16_t lo = rx[idx + i*2];
-        uint16_t hi = rx[idx + i*2 + 1];
-        frame.data[i] = static_cast<uint16_t>(lo | (hi << 8));
+        int16_t lo = rx[idx + i*2];
+        int16_t hi = rx[idx + i*2 + 1];
+        frame.data[i] = static_cast<int16_t>(lo | (hi << 8));
     } // data bytes
     idx += 2 * DATA_N;
     std::memcpy(frame.status.data(), &rx[idx], DATA_N); // status bytes
@@ -187,6 +193,29 @@ bool CDCReader::get_latest_frame_(SerialDevice& dev, SensorFrame& frame) {
     rx.erase(rx.begin(), rx.begin() + idx);
     return true;
 }
+
+// This removes measurements above the distance threshold and with invalid status (not 5, 9, or 10)
+void CDCReader::filter_data(SensorFrame& frame) {
+    const auto is_valid_status = [](const uint8_t s) {
+        return (s == 5 || s == 6 || s == 9 || s == 10);
+    };
+
+    for (size_t i = 0; i < frame.status.size(); i++) {
+        const bool valid = is_valid_status(frame.status[i]);
+
+        if (!valid) {
+            frame.data[i] = static_cast<int16_t>(-1);
+            // std::cout << static_cast<int>(frame.status[i]) << std::endl;
+            // std::cout.flush();
+            continue;
+        }
+
+        if (frame.data[i] > dist_threshold) {
+            frame.data[i] = threshold_repl;
+        }
+    }
+}
+
 
 // Independant update of each sensor object
 void CDCReader::update_sensor_(SensorFrame& sensor_frame,

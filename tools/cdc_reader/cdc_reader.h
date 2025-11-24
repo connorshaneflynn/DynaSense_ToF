@@ -26,9 +26,9 @@ public:
     // Sensor Struct
     struct SensorFrame {
         uint8_t sensor_ID;
-        std::array<uint16_t, DATA_N> data{};
+        std::array<int16_t, DATA_N> data{};
         std::array<uint8_t, DATA_N> status{};
-        uint64_t seq = 0;                       // sequence counter, maybe remove (TODO)
+        uint64_t seq = 0;
     };
 
     // Shared Data Struct for all sensors in one object for *internal* handling.
@@ -47,7 +47,7 @@ public:
 
     /* constructor / destructor */
 
-    explicit CDCReader();  // TODO: add params
+    explicit CDCReader(int16_t max_distance = 1000); // TODO: add params
     ~CDCReader(); // includes stop thread, close and free devices
 
     bool init();  // includes get and open devices, store ports in serial_devices, create buffer
@@ -55,7 +55,7 @@ public:
 
     /* methods */
 
-    void run();  // starts the thread and runs the function, (sleeps shortly before returning)
+    void run();  // starts the thread and runs the function (sleeps shortly before returning)
     void stop(); // stops the thread
 
     void update_snapshot();
@@ -77,6 +77,8 @@ private:
 
     bool get_latest_frame_(SerialDevice& dev, SensorFrame& frame);
 
+    void filter_data(SensorFrame& frame);
+
     void update_sensor_(
         SensorFrame& sensor_frame,
         SensorFrame& new_frame,
@@ -91,6 +93,9 @@ private:
 
     std::thread t_;
     std::atomic<bool> running_{false};
+
+    int16_t dist_threshold;  // max distance in mm
+    int16_t threshold_repl;  // value to replace overflow distance with
 
     std::vector<SerialDevice> serial_devices;
     std::deque<std::mutex> sensor_mtxs;
