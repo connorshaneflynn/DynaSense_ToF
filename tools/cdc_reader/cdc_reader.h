@@ -49,6 +49,11 @@ public:
         std::vector<SensorFrame> sensors;
     };
 
+    // Snapshot struct that saves sensors as mapping so accessible through string ID
+    struct Snapshot {
+        std::unordered_map<std::string, SensorFrame> sensors;
+    };
+
     // Device Struct for each serial device
     struct SerialDevice {
         std::string serial_number;
@@ -74,22 +79,20 @@ public:
 
     void update_snapshot();
 
-    const SharedData& get_snapshot_handle();
+    const Snapshot& get_snapshot_handle();
 
-    const SensorFrame& get_sensor(std::string string_ID);
+    // const SensorFrame& get_sensor(std::string string_ID);
 
 
     /* member variables and objects*/
 
-    SharedData snapshot;
+    Snapshot snapshot;
 
 
 private:
     /* methods */
 
     std::vector<sp_port*> get_and_open_devices_();
-
-    void build_device_mapping(const std::string path);
 
     bool read_into_buffer_(SerialDevice& dev);
 
@@ -118,8 +121,9 @@ private:
     std::vector<SerialDevice> serial_devices;
     std::deque<std::mutex> sensor_mtxs;
 
-    // maps user string index to internal index
-    std::unordered_map<std::string, size_t> ID_mapping_;
+    // maps internal index to user string ID
+    // std::unordered_map<std::string, size_t> ID_mapping_;
+    std::unordered_map<size_t, std::string> ID_mapping_;
 
     SharedData shared;
 };

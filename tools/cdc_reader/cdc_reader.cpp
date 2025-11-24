@@ -56,7 +56,7 @@ bool CDCReader::init() {
         } else {
             user_ID = portname;
         }
-        ID_mapping_[user_ID] = i;
+        ID_mapping_[i] = user_ID;
     }
 
     // resize objects so an instance exists for each device
@@ -64,7 +64,7 @@ bool CDCReader::init() {
         sensor_mtxs.emplace_back();
     } // TODO: or use unique ptr and resize because it is movable
     shared.sensors.resize(serial_devices.size());
-    snapshot.sensors.resize(serial_devices.size());
+    // snapshot.sensors.resize(serial_devices.size());
 
     return true;
 }
@@ -252,17 +252,17 @@ void CDCReader::update_snapshot() {
     // TODO: check that actualy real copy
     for (size_t i = 0; i < shared.sensors.size(); ++i) {
         std::lock_guard<std::mutex> lock(sensor_mtxs[i]);
-        snapshot.sensors[i] = shared.sensors[i];
+        snapshot.sensors[ID_mapping_.at(i)] = shared.sensors[i];
     }
 }
 
 // Returns a reference to the CDC object snapshot
 // Same as accesing CDCReader::snapshot directly
-const CDCReader::SharedData& CDCReader::get_snapshot_handle() {
+const CDCReader::Snapshot& CDCReader::get_snapshot_handle() {
     return snapshot;
 }
 
-// return specific sensor frame from snapshot using the user mapping
-const CDCReader::SensorFrame& CDCReader::get_sensor(std::string string_ID) {
-    return snapshot.sensors[ID_mapping_.at(string_ID)];
-}
+// // return specific sensor frame from snapshot using the user mapping
+// const CDCReader::SensorFrame& CDCReader::get_sensor(std::string string_ID) {
+//     return snapshot.sensors[ID_mapping_.at(string_ID)];
+// }

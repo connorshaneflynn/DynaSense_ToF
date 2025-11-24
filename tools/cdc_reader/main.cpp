@@ -7,6 +7,7 @@
 
 static constexpr std::array<uint8_t, 1> PLOT_INDICES {3};
 
+// helper function to print several zones, specified in PLOT_INDICES
 void print_snapshot(const CDCReader::SharedData& snap) {
     for (int i = 0; i < snap.sensors.size(); i++) {
         std::cout << i << ":  ";
@@ -28,7 +29,7 @@ int main() {
     reader.run();
 
     // reference to internal snapshot of sensor data
-    const auto& snap = reader.get_snapshot_handle();
+    auto& snap = reader.get_snapshot_handle();
     // or use:
     // const CDCReader::SharedData& snapshot = reader.snapshot;
     // NOTE: I can change how the snapshot is passed to the main loop if you want
@@ -36,8 +37,7 @@ int main() {
     for (size_t i = 0; i < 300; i++) {
         reader.update_snapshot();
         // print_snapshot(snap);
-
-        std::cout << reader.get_sensor("FL").data[5] << std::endl;
+        std::cout << snap.sensors.at("FL").data[5] << std::endl;
 
         // run loop at ~50hz
         std::this_thread::sleep_for(std::chrono::milliseconds(20));
