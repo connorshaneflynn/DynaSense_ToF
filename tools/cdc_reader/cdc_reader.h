@@ -94,6 +94,8 @@ private:
 
     std::vector<sp_port*> get_and_open_devices_();
 
+    void store_devices_(std::vector<sp_port*>& dev_ports);
+
     bool read_into_buffer_(SerialDevice& dev);
 
     bool get_latest_frame_(SerialDevice& dev, SensorFrame& frame);

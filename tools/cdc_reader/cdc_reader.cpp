@@ -1,4 +1,5 @@
 #include "cdc_reader.h"
+
 #include <vector>
 #include <array>
 #include <chrono>
@@ -38,26 +39,7 @@ bool CDCReader::init() {
     if (dev_ports.empty()) return false;
     
     // store ports as devices and add to mapping
-    for (size_t i = 0; i < dev_ports.size(); i++) {
-        sp_port* port = dev_ports[i];
-        std::string SN = sp_get_port_usb_serial(port);
-        std::string portname = sp_get_port_name(port);
-        // add to UID to index map by using serial to UID bridge
-        serial_devices.emplace_back(SerialDevice{
-            SN, portname, port, true, {}
-        });
-        serial_devices.back().rx_buf.reserve(RX_BUFFER_SIZE);
-
-        // add to ID map
-        // Use defined map if key exists in map, else use port name
-        std::string user_ID;
-        if (user_id_map.count(SN)) {
-            user_ID = user_id_map.at(SN);
-        } else {
-            user_ID = portname;
-        }
-        ID_mapping_[i] = user_ID;
-    }
+    store_devices_(dev_ports);
 
     // resize objects so an instance exists for each device
     for (size_t i = 0; i < serial_devices.size(); ++i) {
@@ -149,6 +131,30 @@ std::vector<sp_port*> CDCReader::get_and_open_devices_() {
     return found_devices;
 }
 
+// store ports as devices and add to mapping
+void CDCReader::store_devices_(std::vector<sp_port*>& dev_ports) {
+    for (size_t i = 0; i < dev_ports.size(); i++) {
+        sp_port* port = dev_ports[i];
+        std::string SN = sp_get_port_usb_serial(port);
+        std::string portname = sp_get_port_name(port);
+
+        serial_devices.emplace_back(SerialDevice{
+            SN, portname, port, true, {}
+        });
+        serial_devices.back().rx_buf.reserve(RX_BUFFER_SIZE);
+
+        // add to ID map
+        // Use defined map if key exists in map, else use port name
+        std::string user_ID;
+        if (user_id_map.count(SN)) {
+            user_ID = user_id_map.at(SN);
+        } else {
+            user_ID = portname;
+        }
+        ID_mapping_[i] = user_ID;
+    }
+    std::cout << user_id_map.size() << " devices specified in mapping.\n\n";
+}
 
 // Drains the OS CDC buffer into a user-space device buffer
 // This allows for better data parsing and consistency
