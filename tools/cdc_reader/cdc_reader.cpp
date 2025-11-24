@@ -8,6 +8,7 @@
 #include <cstdint>
 #include <iostream>
 #include <deque>
+#include <unordered_map>
 
 #include <libserialport.h>
 
@@ -36,12 +37,26 @@ bool CDCReader::init() {
     // TODO: maybe use unique ptr
     if (dev_ports.empty()) return false;
     
-    // store ports as devices
-    for (auto* port : dev_ports) {
+    // store ports as devices and add to mapping
+    for (size_t i = 0; i < dev_ports.size(); i++) {
+        sp_port* port = dev_ports[i];
+        std::string SN = sp_get_port_usb_serial(port);
+        std::string portname = sp_get_port_name(port);
+        // add to UID to index map by using serial to UID bridge
         serial_devices.emplace_back(SerialDevice{
-            sp_get_port_name(port), port, true, {}
+            SN, portname, port, true, {}
         });
         serial_devices.back().rx_buf.reserve(RX_BUFFER_SIZE);
+
+        // add to ID map
+        // Use defined map if key exists in map, else use port name
+        std::string user_ID;
+        if (user_id_map.count(SN)) {
+            user_ID = user_id_map.at(SN);
+        } else {
+            user_ID = portname;
+        }
+        ID_mapping_[user_ID] = i;
     }
 
     // resize objects so an instance exists for each device
@@ -133,6 +148,7 @@ std::vector<sp_port*> CDCReader::get_and_open_devices_() {
     }
     return found_devices;
 }
+
 
 // Drains the OS CDC buffer into a user-space device buffer
 // This allows for better data parsing and consistency
@@ -244,4 +260,9 @@ void CDCReader::update_snapshot() {
 // Same as accesing CDCReader::snapshot directly
 const CDCReader::SharedData& CDCReader::get_snapshot_handle() {
     return snapshot;
+}
+
+// return specific sensor frame from snapshot using the user mapping
+const CDCReader::SensorFrame& CDCReader::get_sensor(std::string string_ID) {
+    return snapshot.sensors[ID_mapping_.at(string_ID)];
 }

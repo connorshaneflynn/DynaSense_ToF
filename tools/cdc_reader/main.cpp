@@ -35,7 +35,9 @@ int main() {
 
     for (size_t i = 0; i < 300; i++) {
         reader.update_snapshot();
-        print_snapshot(snap);        
+        // print_snapshot(snap);
+
+        std::cout << reader.get_sensor("FL").data[5] << std::endl;
 
         // run loop at ~50hz
         std::this_thread::sleep_for(std::chrono::milliseconds(20));

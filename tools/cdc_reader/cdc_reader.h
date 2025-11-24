@@ -6,6 +6,12 @@
 #include <array>
 #include <thread>
 #include <deque>
+#include <unordered_map>
+
+// temporary static ID mapping instead of separate json file
+static const std::unordered_map<std::string, std::string> user_id_map = {
+    {"209C35B54234", "FL"}
+};
 
 // forward declaration from libserialport
 struct sp_port;
@@ -23,22 +29,30 @@ public:
     
     /* structs */
 
+    // ID Struct
+    struct unique_ID {
+        std::string device_ID;
+        uint8_t sensor_ID;
+    };
+
     // Sensor Struct
     struct SensorFrame {
+        unique_ID ID;
         uint8_t sensor_ID;
         std::array<int16_t, DATA_N> data{};
         std::array<uint8_t, DATA_N> status{};
         uint64_t seq = 0;
     };
 
-    // Shared Data Struct for all sensors in one object for *internal* handling.
+    // Shared Data Struct for all sensors in one object
     struct SharedData {
         std::vector<SensorFrame> sensors;
     };
 
     // Device Struct for each serial device
     struct SerialDevice {
-        std::string name;
+        std::string serial_number;
+        std::string portname;
         sp_port* port;
         bool valid = false;
         std::vector<uint8_t> rx_buf;
@@ -62,8 +76,10 @@ public:
 
     const SharedData& get_snapshot_handle();
 
+    const SensorFrame& get_sensor(std::string string_ID);
 
-    /* member variables */
+
+    /* member variables and objects*/
 
     SharedData snapshot;
 
@@ -72,6 +88,8 @@ private:
     /* methods */
 
     std::vector<sp_port*> get_and_open_devices_();
+
+    void build_device_mapping(const std::string path);
 
     bool read_into_buffer_(SerialDevice& dev);
 
@@ -99,6 +117,9 @@ private:
 
     std::vector<SerialDevice> serial_devices;
     std::deque<std::mutex> sensor_mtxs;
+
+    // maps user string index to internal index
+    std::unordered_map<std::string, size_t> ID_mapping_;
 
     SharedData shared;
 };
