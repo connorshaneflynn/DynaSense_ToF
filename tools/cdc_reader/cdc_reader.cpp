@@ -32,6 +32,7 @@ CDCReader::~CDCReader() {
     }
 }
 
+// Gets and opens devices, store them, creates mapping and device buffer. Initializes objects.
 bool CDCReader::init() {
     // get and open ports
     std::vector<sp_port*> dev_ports = get_and_open_devices_();
@@ -51,12 +52,14 @@ bool CDCReader::init() {
     return true;
 }
 
+// Starts the thread and runs all devices (sleeps shortly before returning)
 void CDCReader::run() {
     if (running_) return;
     running_ = true;
     t_ = std::thread(&CDCReader::run_all_devices_, this);
 }
 
+// Stops the thread
 void CDCReader::stop() {
     if (!running_) return;
     running_ = false;
@@ -179,6 +182,7 @@ bool CDCReader::read_into_buffer_(SerialDevice& dev) {
 }
 
 // Extracts the latest frame from the device buffer and stores it in sensor object
+// Erases used device buffer
 bool CDCReader::get_latest_frame_(SerialDevice& dev, SensorFrame& frame) {
     std::vector<uint8_t>& rx = dev.rx_buf;
 
@@ -217,6 +221,7 @@ bool CDCReader::get_latest_frame_(SerialDevice& dev, SensorFrame& frame) {
 }
 
 // This removes measurements above the distance threshold and with invalid status (not 5, 9, or 10)
+// FIlters frame data in place
 void CDCReader::filter_data(SensorFrame& frame) {
     const auto is_valid_status = [](const uint8_t s) {
         return (s == 5 || s == 6 || s == 9 || s == 10);
@@ -241,8 +246,8 @@ void CDCReader::filter_data(SensorFrame& frame) {
 
 // Independant update of each sensor object
 void CDCReader::update_sensor_(SensorFrame& sensor_frame,
-                   SensorFrame& new_frame,
-                   std::mutex& mutex) {
+                               SensorFrame& new_frame,
+                               std::mutex& mutex) {
                     
     std::lock_guard<std::mutex> lock(mutex);
     std::memcpy(sensor_frame.data.data(), new_frame.data.data(), DATA_N * 2); // each value is 2 bytes

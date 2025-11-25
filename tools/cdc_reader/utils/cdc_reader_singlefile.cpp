@@ -1,3 +1,8 @@
+/*
+This is the first iteration of the CDCReader.
+It is functional but a few changes have been made since changing to the class structure.
+*/
+
 #include <iostream>
 #include <vector>
 #include <array>

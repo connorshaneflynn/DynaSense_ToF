@@ -21,10 +21,10 @@ public:
     /* constants */
 
     // These are firmware dependent values
-    static constexpr uint8_t DATA_N = 16;
-    static constexpr std::array<uint8_t, 2> header = {0xAA, 0x55};
-    static constexpr uint8_t FRAME_SIZE = header.size() + 1 + DATA_N * 2 + DATA_N;
-    static constexpr std::string_view PRODUCT_NAME = "STM32 ToF";
+    static constexpr uint8_t DATA_N = 16;                                               // Number of measurements
+    static constexpr std::array<uint8_t, 2> header = {0xAA, 0x55};                      // For frame synchronization
+    static constexpr uint8_t FRAME_SIZE = header.size() + 1 + DATA_N * 2 + DATA_N;      // Header, Sensor ID, Distance, Status
+    static constexpr std::string_view PRODUCT_NAME = "STM32 ToF";                       // To identify CDC devices
 
     
     /* structs */
@@ -34,14 +34,15 @@ public:
         std::string device_ID;
         uint8_t sensor_ID;
     };
+    // TODO: not used currently but will when num sensors != num devices
 
     // Sensor Struct
     struct SensorFrame {
-        unique_ID ID;
+        unique_ID ID;                               // not yet used
         uint8_t sensor_ID;
         std::array<int16_t, DATA_N> data{};
         std::array<uint8_t, DATA_N> status{};
-        uint64_t seq = 0;
+        uint64_t seq = 0;                           // not yet used, to keep track of updates
     };
 
     // Shared Data Struct for all sensors in one object
@@ -59,29 +60,30 @@ public:
         std::string serial_number;
         std::string portname;
         sp_port* port;
-        bool valid = false;
+        bool valid = false;                         // not yet used, for error handling
         std::vector<uint8_t> rx_buf;
     };
 
 
     /* constructor / destructor */
 
-    explicit CDCReader(int16_t max_distance = 1000); // TODO: add params
+    explicit CDCReader(int16_t max_distance = 1000);
     ~CDCReader(); // includes stop thread, close and free devices
 
-    bool init();  // includes get and open devices, store ports in serial_devices, create buffer
+    bool init();  // includes get and open devices, store serial_devices, create mapping and buffer
 
 
     /* methods */
 
-    void run();  // starts the thread and runs the function (sleeps shortly before returning)
-    void stop(); // stops the thread
+    void run();
+    void stop();
 
     void update_snapshot();
 
     const Snapshot& get_snapshot_handle();
 
     // const SensorFrame& get_sensor(std::string string_ID);
+    // NOTE: Not used anymore but could reimplement if wished.
 
 
     /* member variables and objects*/
@@ -123,9 +125,7 @@ private:
     std::vector<SerialDevice> serial_devices;
     std::deque<std::mutex> sensor_mtxs;
 
-    // maps internal index to user string ID
-    // std::unordered_map<std::string, size_t> ID_mapping_;
-    std::unordered_map<size_t, std::string> ID_mapping_;
+    std::unordered_map<size_t, std::string> ID_mapping_;  // maps internal index to user string ID
 
     SharedData shared;
 };

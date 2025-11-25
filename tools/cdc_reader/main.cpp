@@ -20,29 +20,36 @@ void print_snapshot(const CDCReader::SharedData& snap) {
 }
 
 int main() {
+    // Construct and initialize
     uint16_t distance_threshold = 1000;
-    CDCReader reader;  //default threshold is max int16_t value
+    CDCReader reader(distance_threshold);
     if (!reader.init()) {
         std::cout << "ERROR: Failed to initialize the CDC reader\n";
         return 1;
     };
+
+    // Start the reader thread
     reader.run();
 
-    // reference to internal snapshot of sensor data
+    // Access data snapshot per reference
     auto& snap = reader.get_snapshot_handle();
     // or use:
     // const CDCReader::SharedData& snapshot = reader.snapshot;
     // NOTE: I can change how the snapshot is passed to the main loop if you want
 
+    // Simulate main loop
     for (size_t i = 0; i < 300; i++) {
+        // Update snapshot with latest data
         reader.update_snapshot();
-        // print_snapshot(snap);
+
+        // Some processing
         std::cout << snap.sensors.at("FL").data[5] << std::endl;
 
         // run loop at ~50hz
         std::this_thread::sleep_for(std::chrono::milliseconds(20));
     }
     
+    // Stop the reader thread
     reader.stop();
     return 0;
 }

@@ -48,7 +48,6 @@ target_link_libraries(${CMAKE_PROJECT_NAME}
 
 ###########   UTILS   ###########
 
-# temp compile of other files
 set(FNAME list_cdc_devices)
 # Create Executable
 add_executable(${FNAME} utils/list_cdc_devices.cpp)
@@ -57,7 +56,6 @@ add_executable(${FNAME} utils/list_cdc_devices.cpp)
 target_include_directories(${FNAME} PRIVATE
     # ${CMAKE_SOURCE_DIR}/inc
 )
-
 
 # Packages
 target_include_directories(${FNAME} PRIVATE
