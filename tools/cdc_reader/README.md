@@ -6,6 +6,10 @@ Small Class that reads sensor data from STM32 USB CDC devices using libserialpor
 
 This project provides a `CDCReader` C++ class for reading sensor data from USB CDC devices. It maintains a data structure with the newest sensor frames in a separate thread and provides the user with an independent snapshot of the latest data. It includes example code showing integration, utility helpers, and CMake build configuration.
 
+
+const auto snap = reader.get_snapshot();;
+
+
 ## Features
 
 - C++ class (`cdc_reader.h` / `cdc_reader.cpp`) implementing USB CDC data acquisition  
@@ -43,6 +47,37 @@ Linux:
 
 ``` shell
 sudo apt install libserialport-dev
+```
+
+## USB Permissions
+
+On Ubuntu the user does not have permission to access USB devices per default.
+The user can either be added to the `dialout` group for serial/CDC access or a udev rule can be created for more specific permissions.
+Call `ls -l /dev/ttyACM*` to see all CDC devices and their permission.
+
+### Dialout Group
+
+``` shell
+sudo usermod -aG dialout $USER
+```
+
+Then log out or reboot.
+
+### Udev Rule
+
+Create a rule file: `/etc/udev/rules.d/90-cdc.rules`. The file name can be changed. Number first is convention.
+
+File content:
+
+``` txt
+SUBSYSTEM=="tty", ATTRS{product}=="STM32 ToF", MODE="0666"
+```
+
+Log our or reload rules:
+
+``` shell
+sudo udevadm control --reload-rules
+sudo udevadm trigger
 ```
 
 ## How to Use the Class
