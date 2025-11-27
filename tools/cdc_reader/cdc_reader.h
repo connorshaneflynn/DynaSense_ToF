@@ -10,7 +10,10 @@
 
 // temporary static ID mapping instead of separate json file
 static const std::unordered_map<std::string, std::string> user_id_map = {
-    {"209C35B54234", "FL"}
+    {"209C35B54234", "FL"},
+    {"205E35844234", "FR"},
+    {"205435984234", "BR"},
+    {"205C35B54234", "BL"}
 };
 
 // forward declaration from libserialport
@@ -53,6 +56,7 @@ public:
     // Snapshot struct that saves sensors as mapping so accessible through string ID
     struct Snapshot {
         std::unordered_map<std::string, SensorFrame> sensors;
+        std::vector<std::string> names;            // Names of found sensors
     };
 
     // Device Struct for each serial device

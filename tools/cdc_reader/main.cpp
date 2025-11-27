@@ -43,7 +43,10 @@ int main() {
         reader.update_snapshot();
 
         // Some processing
-        std::cout << snap.sensors.at("FL").data[5] << std::endl;
+
+        // Here the first sensor is extracted from the snapshot to make it independent of naming
+        const std::string& sensor_name = snap.names[0];
+        std::cout << snap.sensors.at(sensor_name).data[5] << std::endl;
 
         // run loop at ~50hz
         std::this_thread::sleep_for(std::chrono::milliseconds(20));

@@ -152,9 +152,11 @@ void CDCReader::store_devices_(std::vector<sp_port*>& dev_ports) {
         if (user_id_map.count(SN)) {
             user_ID = user_id_map.at(SN);
         } else {
+            std::cout << "Found unmapped device\n";
             user_ID = portname;
         }
         ID_mapping_[i] = user_ID;
+        snapshot.names.push_back(user_ID);
     }
     std::cout << user_id_map.size() << " devices specified in mapping.\n\n";
 }
@@ -260,12 +262,12 @@ void CDCReader::update_sensor_(SensorFrame& sensor_frame,
 // Updates the CDCReader snapshot with the newest data in SharedData.
 void CDCReader::update_snapshot() {
     // replaces old snapshot with newest data using deep copy
-    // TODO: check that actualy real copy
     for (size_t i = 0; i < shared.sensors.size(); ++i) {
         std::lock_guard<std::mutex> lock(sensor_mtxs[i]);
         snapshot.sensors[ID_mapping_.at(i)] = shared.sensors[i];
     }
 }
+// TODO: add all names to snapshot
 
 // Returns a reference to the CDC object snapshot
 // Same as accesing CDCReader::snapshot directly
