@@ -59,9 +59,8 @@ target_include_directories(${FNAME} PRIVATE
 
 # Packages
 target_include_directories(${FNAME} PRIVATE
-    ${SP_INCLUDE_DIR}
 )
 
 target_link_libraries(${FNAME} PRIVATE
-    ${SP_LIBRARY}
+    ${SERIALPORT_LIB}
 )

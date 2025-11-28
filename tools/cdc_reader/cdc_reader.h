@@ -10,7 +10,7 @@
 
 // temporary static ID mapping instead of separate json file
 static const std::unordered_map<std::string, std::string> user_id_map = {
-    {"209C35B54234", "FL"}
+    {"205E35844234", "FL"}
 };
 
 // forward declaration from libserialport

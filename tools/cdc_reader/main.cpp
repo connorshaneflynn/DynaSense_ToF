@@ -32,18 +32,35 @@ int main() {
     reader.run();
 
     // Access data snapshot per reference
-    auto& snap = reader.get_snapshot_handle();
-    // or use:
-    // const CDCReader::SharedData& snapshot = reader.snapshot;
-    // NOTE: I can change how the snapshot is passed to the main loop if you want
+    const auto& snap = reader.get_snapshot_handle();
+    reader.update_snapshot();  // populate snapshot map once before selecting an ID
+
+    // Prefer the mapped ID "FL" if present; otherwise fall back to the first available
+    std::string sensor_id = "FL";
+    if (!snap.sensors.contains(sensor_id)) {
+        if (snap.sensors.empty()) {
+            std::cerr << "No sensors available in snapshot.\n";
+            reader.stop();
+            return 1;
+        }
+        sensor_id = snap.sensors.begin()->first;
+        std::cout << "ID \"FL\" not found, using \"" << sensor_id << "\" instead.\n";
+    } else {
+        std::cout << "Using sensor ID \"" << sensor_id << "\"\n";
+    }
 
     // Simulate main loop
-    for (size_t i = 0; i < 300; i++) {
+    for (size_t i = 0; i < 3000; i++) {
         // Update snapshot with latest data
         reader.update_snapshot();
 
         // Some processing
-        std::cout << snap.sensors.at("FL").data[5] << std::endl;
+        auto it = snap.sensors.find(sensor_id);
+        if (it == snap.sensors.end()) {
+            std::cerr << "Sensor \"" << sensor_id << "\" missing from snapshot.\n";
+            break;
+        }
+        std::cout << it->second.data[5] << std::endl;
 
         // run loop at ~50hz
         std::this_thread::sleep_for(std::chrono::milliseconds(20));
