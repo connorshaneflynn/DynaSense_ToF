@@ -29,12 +29,14 @@ const uint16_t addr2 = 0x52;
 #define RESOLUTION 16                               // NxN
 #define FREQUENCY 60                                // hz
 
-#define INTEGRATION_TIME 3                         // ms
+#define INTEGRATION_TIME 3                          // ms
 #define TARGET_ORDER VL53L5CX_TARGET_ORDER_CLOSEST  // VL53L5CX_TARGET_ORDER_CLOSEST or VL53L5CX_TARGET_ORDER_STRONGEST
 
 // communication
 #define COM_UART true
 #define COM_USB true
+
+#define CDC_TX_TIMEOUT_MS  3                        // wait #ms before skipping data frame if host USB is busy
 
 // general UART buffer
 char msg[512];
@@ -106,6 +108,20 @@ void set_I2C_addresses()
 }
 
 
+uint8_t CDC_Transmit_WithTimeout(uint8_t *buf, uint16_t len)
+{
+    uint32_t start = HAL_GetTick();
+
+    while (CDC_Transmit_FS(buf, len) == USBD_BUSY)
+    {
+        if ((HAL_GetTick() - start) > CDC_TX_TIMEOUT_MS)
+        {
+            return USBD_FAIL;   // custom return code
+        }
+    }
+    return USBD_OK;
+}
+
 void send_measurements(uint8_t sensor_ID, VL53L5CX_ResultsData *results) // int16_t *distances, uint8_t *statuses)
 {
   // all measurements are sent as a single frame over serial
@@ -158,8 +174,9 @@ void send_measurements(uint8_t sensor_ID, VL53L5CX_ResultsData *results) // int1
   // USB
   if (COM_USB)
   {
-    status_transmit = CDC_Transmit_FS(buffer, sizeof(buffer));
+    status_transmit = CDC_Transmit_WithTimeout(buffer, sizeof(buffer));
   }
+  int temp = 5;
   // UART
   if (COM_UART)
   {
@@ -222,8 +239,8 @@ uint8_t initialize(void)
     status = vl53l5cx_set_target_order(&Dev1, TARGET_ORDER);
     status = vl53l5cx_set_resolution(&Dev1, RESOLUTION);
     status = vl53l5cx_set_ranging_frequency_hz(&Dev1, FREQUENCY);
-    status = vl53l5cx_set_ranging_mode(&Dev1, VL53L5CX_RANGING_MODE_CONTINUOUS); // or: VL53L5CX_RANGING_MODE_AUTONOMOUS
-    // status = vl53l5cx_set_integration_time_ms(&Dev1, INTEGRATION_TIME);
+    // status = vl53l5cx_set_ranging_mode(&Dev1, VL53L5CX_RANGING_MODE_CONTINUOUS); // or: VL53L5CX_RANGING_MODE_AUTONOMOUS
+    status = vl53l5cx_set_integration_time_ms(&Dev1, INTEGRATION_TIME);
     status = vl53l5cx_start_ranging(&Dev1);
     }
     
@@ -233,8 +250,8 @@ uint8_t initialize(void)
     status = vl53l5cx_set_target_order(&Dev2, TARGET_ORDER);
     status = vl53l5cx_set_resolution(&Dev2, RESOLUTION);
     status = vl53l5cx_set_ranging_frequency_hz(&Dev2, FREQUENCY);
-    status = vl53l5cx_set_ranging_mode(&Dev2, VL53L5CX_RANGING_MODE_CONTINUOUS); // or: VL53L5CX_RANGING_MODE_AUTONOMOUS
-    // status = vl53l5cx_set_integration_time_ms(&Dev2, INTEGRATION_TIME);
+    // status = vl53l5cx_set_ranging_mode(&Dev2, VL53L5CX_RANGING_MODE_CONTINUOUS); // or: VL53L5CX_RANGING_MODE_AUTONOMOUS
+    status = vl53l5cx_set_integration_time_ms(&Dev2, INTEGRATION_TIME);
     status = vl53l5cx_start_ranging(&Dev2);
     }
     
