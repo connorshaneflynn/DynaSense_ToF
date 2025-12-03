@@ -8,8 +8,9 @@
 #include <atomic>
 #include <cstdint>
 #include <iostream>
-#include <deque>
 #include <unordered_map>
+#include <mutex>
+#include <algorithm>
 
 #include <libserialport.h>
 
@@ -121,6 +122,14 @@ std::vector<sp_port*> CDCReader::get_and_open_devices_() {
                 sp_free_port(dev);
                 continue;
             }
+
+            // set up port
+            sp_set_flowcontrol(dev, SP_FLOWCONTROL_NONE);   // IMPORTANT: disables any processing in the tty layer
+            sp_set_baudrate(dev, 115200);                   // any value, CDC ignores it, but tty sometimes expects it
+            sp_set_bits(dev, 8);                            // these should not be needed but make it definitely safe
+            sp_set_parity(dev, SP_PARITY_NONE);
+            sp_set_stopbits(dev, 1);
+
             found_devices.push_back(dev);
         }
     }
@@ -166,13 +175,10 @@ void CDCReader::store_devices_(std::vector<sp_port*>& dev_ports) {
 // Returns false if no new data in stream
 bool CDCReader::read_into_buffer_(SerialDevice& dev) {
     // check for new data
-    // int waiting = sp_input_waiting(dev.port);
-    // std::cout << "CDC waiting:\t" << waiting << std::endl;
-    // std::cout.flush();
-
     if (sp_input_waiting(dev.port) < FRAME_SIZE) return false;
+
     // temporary storage to read stream in chunks
-    uint8_t tmp[256];  // in normal state max FRAME_SIZE (51) bytes will be waiting in buffer
+    uint8_t tmp[256] {};  // in normal state max FRAME_SIZE (51) bytes will be waiting in buffer
 
     // read stream in tmp chunks and save to device buffer
     while (true) {
@@ -187,9 +193,8 @@ bool CDCReader::read_into_buffer_(SerialDevice& dev) {
 // Erases used device buffer
 bool CDCReader::get_latest_frame_(SerialDevice& dev, SensorFrame& frame) {
     std::vector<uint8_t>& rx = dev.rx_buf;
-
-    // std::cout << "rx buf size:\t" << rx.size() << std::endl;
-    // std::cout.flush();
+    // TODO: is there a race condition here? do i need to use mutex or copy by value?
+    // but: this function is called after buffer read by the same thread, so it should always be sequential
 
     // check if enough bytes for a full frame
     if (rx.size() < FRAME_SIZE) return false;
@@ -203,9 +208,22 @@ bool CDCReader::get_latest_frame_(SerialDevice& dev, SensorFrame& frame) {
         if (it == rx.end() - FRAME_SIZE) return false; // no full frame found
         idx = it - rx.begin();
     }
+    // TODO: make header size variable
+
+    // check frame, temporary until checksum
+    if (rx.size() - 1 > idx + FRAME_SIZE) {
+        // rx buf not exhausted
+        uint8_t last_byte = rx[idx + FRAME_SIZE - 1];
+        if (last_byte == header[0] || last_byte == header[1]) {
+            // 1-3 bytes were lost and the header of the following frame would be consumed
+            // std::cout << "WARNING: Byte slip\n";
+            return false;
+        }
+    }
+    // TODO: implement checksum to make this cleaner and more robust
 
     // copy data into frame
-    idx += 2;  // header bytes
+    idx += header.size();  // header bytes
     frame.sensor_ID = rx[idx]; // ID byte
     idx += 1;
     for (int i = 0; i < DATA_N; ++i) {
@@ -216,9 +234,11 @@ bool CDCReader::get_latest_frame_(SerialDevice& dev, SensorFrame& frame) {
     idx += 2 * DATA_N;
     std::memcpy(frame.status.data(), &rx[idx], DATA_N); // status bytes
     idx += DATA_N;
+    // idx now points one past last byte of frame
     // TODO: maybe into separate function
 
     rx.erase(rx.begin(), rx.begin() + idx);
+
     return true;
 }
 
@@ -234,8 +254,6 @@ void CDCReader::filter_data(SensorFrame& frame) {
 
         if (!valid) {
             frame.data[i] = static_cast<int16_t>(-1);
-            // std::cout << static_cast<int>(frame.status[i]) << std::endl;
-            // std::cout.flush();
             continue;
         }
 

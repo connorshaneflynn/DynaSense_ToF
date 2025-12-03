@@ -2,17 +2,20 @@ cmake_minimum_required(VERSION 3.10.0)
 project(cdc_reader VERSION 0.1.0 LANGUAGES C CXX)
 
 # Set the C++ standard
-set(CMAKE_CXX_STANDARD 23)
+set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
 
-###########   CREATE A LIBRARY   ############
-
-# find external libraries
+# find external libraries and packages
 find_library(SERIALPORT_LIB serialport REQUIRED)
 if(NOT SERIALPORT_LIB)
     message(FATAL_ERROR "libserialport not found")
 endif()
+
+find_package(Threads REQUIRED)
+
+
+###########   CREATE A LIBRARY   ############
 
 # create custom library
 add_library(cdcreader STATIC
@@ -24,8 +27,9 @@ target_include_directories(cdcreader
     PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}
 )
 
-target_link_libraries(cdcreader
-    PRIVATE ${SERIALPORT_LIB}
+target_link_libraries(cdcreader PRIVATE 
+    ${SERIALPORT_LIB}
+    Threads::Threads
 )
 
 
@@ -43,6 +47,7 @@ target_include_directories(${CMAKE_PROJECT_NAME}
 
 target_link_libraries(${CMAKE_PROJECT_NAME}
     PRIVATE ${SERIALPORT_LIB}
+    Threads::Threads
 )
 
 
@@ -58,10 +63,24 @@ target_include_directories(${FNAME} PRIVATE
 )
 
 # Packages
-target_include_directories(${FNAME} PRIVATE
-    ${SP_INCLUDE_DIR}
-)
+# target_include_directories(${FNAME} PRIVATE
+#     ${SP_INCLUDE_DIR}
+# )
 
 target_link_libraries(${FNAME} PRIVATE
-    ${SP_LIBRARY}
+    ${SERIALPORT_LIB}
+    Threads::Threads
 )
+
+##########   OPTIONS   ###########
+
+# target_compile_options(${CMAKE_PROJECT_NAME} PRIVATE
+#     -Wall
+#     -Wextra
+#     -Wpedantic
+#     # -Werror
+# )
+
+# target_link_options(${CMAKE_PROJECT_NAME} PRIVATE
+#     -Wl,--no-undefined
+# )

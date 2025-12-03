@@ -7,13 +7,14 @@
 #include <thread>
 #include <deque>
 #include <unordered_map>
+#include <mutex>
 
 // temporary static ID mapping instead of separate json file
 static const std::unordered_map<std::string, std::string> user_id_map = {
     {"209C35B54234", "FL"},
     {"205E35844234", "FR"},
-    {"205435984234", "BR"},
-    {"205C35B54234", "BL"}
+    {"205435984234", "BL"},
+    {"205C35B54234", "BR"}
 };
 
 // forward declaration from libserialport
@@ -93,6 +94,7 @@ public:
     /* member variables and objects*/
 
     Snapshot snapshot;
+    std::vector<SerialDevice> serial_devices;
 
 
 private:
@@ -126,7 +128,6 @@ private:
     int16_t dist_threshold;  // max distance in mm
     int16_t threshold_repl;  // value to replace overflow distance with
 
-    std::vector<SerialDevice> serial_devices;
     std::deque<std::mutex> sensor_mtxs;
 
     std::unordered_map<size_t, std::string> ID_mapping_;  // maps internal index to user string ID
