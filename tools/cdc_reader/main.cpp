@@ -1,17 +1,18 @@
 #include "cdc_reader.h"
 
 #include <iostream>
-#include <array>
 #include <thread>
 #include <chrono>
+#include <array>
+#include <vector>
 
-static const std::vector<uint8_t> PLOT_INDICES {0, 5, 15};
+static const std::vector<uint8_t> PLOT_INDICES {0, 3, 4, 7, 8, 11, 12, 15};
 
 // helper function to print several zones, specified in PLOT_INDICES
 void print_snapshot(const CDCReader::Snapshot& snapshot, std::vector<uint8_t> indices) {
     for (int i = 0; i < snapshot.sensors.size(); i++) {
-        const std::string name = snapshot.names[i];
-        CDCReader::SensorFrame frame = snapshot.sensors.at(snapshot.names[i]);
+        const std::string name = snapshot.device_names[i];
+        CDCReader::SensorFrame frame = snapshot.sensors.at(snapshot.device_names[i]);
 
         std::cout << i << ":  ";
         for (int idx : indices) {
@@ -23,6 +24,39 @@ void print_snapshot(const CDCReader::Snapshot& snapshot, std::vector<uint8_t> in
     std::cout << std::endl;
     std::cout.flush();
 }
+
+
+// helper function to observe the sequence numbers of all found sensors
+void print_snapshot_seq(const CDCReader::Snapshot& snapshot) {
+    static std::vector<int64_t> prev_seqs;
+    if (prev_seqs.empty()) prev_seqs.resize(snapshot.sensors.size());
+
+    uint64_t max_seq = 0;
+    uint64_t min_seq = -1;  // sets to max value
+
+    for (size_t i = 0; i < snapshot.sensors.size(); i++) {
+        const std::string name = snapshot.device_names[i];
+        CDCReader::SensorFrame frame = snapshot.sensors.at(snapshot.device_names[i]);
+
+        int64_t seq = static_cast<int64_t>(frame.seq);
+
+        std::cout << frame.ID.device_ID << ":\t" << seq << "   (" << seq-prev_seqs[i] << ")\t\t";
+        
+        if (frame.seq > max_seq) max_seq = frame.seq;
+        if (frame.seq < min_seq) min_seq = frame.seq;
+
+        prev_seqs[i] = seq;
+    }
+
+    if (max_seq > min_seq) {
+        std::cout << "Max Diff:\t" << max_seq - min_seq;
+    }
+
+    std::cout << std::endl;
+    std::cout.flush();
+}
+
+
 
 int main() {
     // Construct and initialize
@@ -54,7 +88,8 @@ int main() {
         // std::cout << snap.sensors.at(sensor_name).data[5] << std::endl;
 
         // or using a user defined print function
-        print_snapshot(snap, PLOT_INDICES);
+        // print_snapshot(snap, PLOT_INDICES);
+        print_snapshot_seq(snap);
 
         // run loop at ~50hz
         std::this_thread::sleep_for(std::chrono::milliseconds(20));

@@ -43,12 +43,14 @@ bool CDCReader::init() {
     // store ports as devices and add to mapping
     store_devices_(dev_ports);
 
-    // resize objects so an instance exists for each device
+    // create mutex and sensor objects for each device
     for (size_t i = 0; i < serial_devices.size(); ++i) {
         sensor_mtxs.emplace_back();
-    } // TODO: or use unique ptr and resize because it is movable
-    shared.sensors.resize(serial_devices.size());
-    // snapshot.sensors.resize(serial_devices.size());
+
+        shared.sensors.emplace_back();
+        shared.sensors.back().ID.device_ID = snapshot.device_names[i];
+
+    } // TODO: or use unique ptr for mtx and resize because it is movable
 
     return true;
 }
@@ -165,7 +167,7 @@ void CDCReader::store_devices_(std::vector<sp_port*>& dev_ports) {
             user_ID = portname;
         }
         ID_mapping_[i] = user_ID;
-        snapshot.names.push_back(user_ID);
+        snapshot.device_names.push_back(user_ID);
     }
     std::cout << user_id_map.size() << " devices specified in mapping.\n\n";
 }
