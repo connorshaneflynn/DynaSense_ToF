@@ -13,8 +13,8 @@
 static const std::unordered_map<std::string, std::string> user_id_map = {
     {"209C35B54234", "FL"},
     {"205E35844234", "FR"},
-    {"205435984234", "BR"},
-    {"205C35B54234", "BL"}
+    {"205C35B54234", "BR"},
+    {"205435984234", "BL"}
 };
 
 // forward declaration from libserialport
