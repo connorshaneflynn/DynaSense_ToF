@@ -6,7 +6,7 @@
 #include <array>
 #include <vector>
 
-static const std::vector<uint8_t> PLOT_INDICES {0, 3, 4, 7, 8, 11, 12, 15};
+static const std::vector<uint8_t> PLOT_INDICES {5, 15};
 
 // helper function to print several zones, specified in PLOT_INDICES
 void print_snapshot(const CDCReader::Snapshot& snapshot, std::vector<uint8_t> indices) {
@@ -77,7 +77,7 @@ int main() {
     // NOTE: I can change how the snapshot is passed to the main loop if you want
 
     // Simulate main loop
-    for (size_t i = 0; i < 500; i++) {
+    for (size_t i = 0; i < 1500; i++) {
         // Update snapshot with latest data
         reader.update_snapshot();
 
@@ -88,8 +88,8 @@ int main() {
         // std::cout << snap.sensors.at(sensor_name).data[5] << std::endl;
 
         // or using a user defined print function
-        // print_snapshot(snap, PLOT_INDICES);
-        print_snapshot_seq(snap);
+        print_snapshot(snap, PLOT_INDICES);
+        // print_snapshot_seq(snap);
 
         // run loop at ~50hz
         std::this_thread::sleep_for(std::chrono::milliseconds(20));

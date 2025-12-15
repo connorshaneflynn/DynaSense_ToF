@@ -82,17 +82,63 @@ void CDCReader::run_all_devices_() {
     }
 
     while (running_) {
-        for (int i = 0; i < serial_devices.size(); i++) {
-            // read OS CDC buffer
-            if (!read_into_buffer_(serial_devices[i])) continue;  // no new data
+        using enum DeviceState;
+        auto now = std::chrono::steady_clock::now();
 
-            // extract latest frame and filter
-            if (!get_latest_frame_(serial_devices[i], frame)) continue;  // no new full frame
-            filter_data(frame);
+        // iterate through devices
+        for (int i = 0; i < serial_devices.size(); i++) {
+            SerialDevice& dev = serial_devices[i];
+
+            // read frame, skip if no new data yet
+            if (dev.state == CONNECTED) {
+                // read OS CDC buffer
+                if (!read_into_buffer_(dev)) continue;  // no new data
+
+                // extract latest frame and filter
+                if (!get_latest_frame_(dev, frame)) continue;  // no new full frame
+                
+                filter_data(frame);
+
+            } else {
+
+                // ------ State handling ------
+                switch (dev.state) {
+
+                    // ignore
+                    case DISCONNECTED:
+                    case FAIL_STATE:
+                        break;
+
+                    // try reconnect
+                    case ERROR:
+                        reset_device_(dev);
+                        [[fallthrough]];
+                    case RETRY_WAIT:
+                        if (now >= dev.next_retry) {
+                            try_reconnect_(dev);
+                        }
+                        break;
+                }
+            }
+
+            // fill invalid frame if device still not OK
+            if (dev.state != CONNECTED) {
+                make_invalid_frame(shared.sensors[i], frame);
+            };
 
             update_sensor_(shared.sensors[i], frame, sensor_mtxs[i]);
         }
+        
         std::this_thread::sleep_for(std::chrono::milliseconds(1));
+    }
+
+    // close all devices and free ports
+    for (auto& dev : serial_devices) {
+        sp_close(dev.port);
+        sp_free_port(dev.port);
+        dev.port = nullptr;
+        dev.rx_buf.clear();
+        dev.state = DeviceState::DISCONNECTED;
     }
 }
 
@@ -115,24 +161,24 @@ std::vector<sp_port*> CDCReader::get_and_open_devices_() {
         const char* product = sp_get_port_usb_product(all_ports[i]);
         if (product && product == PRODUCT_NAME) {
             // Save port
-            sp_port* dev = nullptr;
-            sp_copy_port(all_ports[i], &dev);
+            sp_port* dev_port = nullptr;
+            sp_copy_port(all_ports[i], &dev_port);
             // Open port
-            if (sp_open(dev,SP_MODE_READ_WRITE) != SP_OK) {
+            if (sp_open(dev_port,SP_MODE_READ_WRITE) != SP_OK) {
                 // free port
-                std::cerr << "ERROR: Could not open port " << sp_get_port_name(dev) << std::endl;
-                sp_free_port(dev);
+                std::cerr << "ERROR: Could not open port " << sp_get_port_name(dev_port) << std::endl;
+                sp_free_port(dev_port);
                 continue;
             }
 
             // set up port
-            sp_set_flowcontrol(dev, SP_FLOWCONTROL_NONE);   // IMPORTANT: disables any processing in the tty layer
-            sp_set_baudrate(dev, 115200);                   // any value, CDC ignores it, but tty sometimes expects it
-            sp_set_bits(dev, 8);                            // these should not be needed but make it definitely safe
-            sp_set_parity(dev, SP_PARITY_NONE);
-            sp_set_stopbits(dev, 1);
+            sp_set_flowcontrol(dev_port, SP_FLOWCONTROL_NONE);   // IMPORTANT: disables any processing in the tty layer
+            sp_set_baudrate(dev_port, 115200);                   // any value, CDC ignores it, but tty sometimes expects it
+            sp_set_bits(dev_port, 8);                            // these should not be needed but make it definitely safe
+            sp_set_parity(dev_port, SP_PARITY_NONE);
+            sp_set_stopbits(dev_port, 1);
 
-            found_devices.push_back(dev);
+            found_devices.push_back(dev_port);
         }
     }
     sp_free_port_list(all_ports);
@@ -153,7 +199,7 @@ void CDCReader::store_devices_(std::vector<sp_port*>& dev_ports) {
         std::string portname = sp_get_port_name(port);
 
         serial_devices.emplace_back(SerialDevice{
-            SN, portname, port, true, {}
+            SN, portname, port, DeviceState::CONNECTED, {}, {}  // TODO: check that zero initializing works
         });
         serial_devices.back().rx_buf.reserve(RX_BUFFER_SIZE);
 
@@ -172,12 +218,87 @@ void CDCReader::store_devices_(std::vector<sp_port*>& dev_ports) {
     std::cout << user_id_map.size() << " devices specified in mapping.\n\n";
 }
 
+void CDCReader::reset_device_(SerialDevice& dev) {
+    std::cout << "Reseting device:\t" << dev.portname << std::endl;
+    sp_close(dev.port);
+    sp_free_port(dev.port);
+    dev.port = nullptr;
+    dev.rx_buf.clear();
+    dev.state = DeviceState::DISCONNECTED;
+    std::cout << "Disconnected Device:\t" << dev.portname << std::endl;
+}
+
+bool CDCReader::try_reconnect_(SerialDevice& dev) {
+    std::cout << "Reconnecting Device:\t" << dev.portname << std::endl;
+    sp_port** ports;
+    if (sp_list_ports(&ports) != SP_OK) {
+        std::cerr << "ERROR: Failed to read any port\n";
+        return false;
+    }
+
+    for (size_t i = 0; ports[i] != nullptr; ++i) {
+        const char* SN = sp_get_port_usb_serial(ports[i]);
+        if (SN != dev.serial_number) continue;
+
+        // found device
+        sp_copy_port(ports[i], &dev.port);
+        if (sp_open(dev.port, SP_MODE_READ_WRITE) != SP_OK) {
+            // free port
+            std::cerr << "ERROR: Found port but unable to open port: " << dev.portname << std::endl;
+            sp_free_port(dev.port);
+            dev.port = nullptr;
+            dev.state = DeviceState::FAIL_STATE;
+            return false;
+        }
+
+        char* name = sp_get_port_name(dev.port);
+
+        sp_set_flowcontrol(dev.port, SP_FLOWCONTROL_NONE);   // IMPORTANT: disables any processing in the tty layer
+        sp_set_baudrate(dev.port, 115200);                   // any value, CDC ignores it, but tty sometimes expects it
+        sp_set_bits(dev.port, 8);                            // these should not be needed but make it definitely safe
+        sp_set_parity(dev.port, SP_PARITY_NONE);
+        sp_set_stopbits(dev.port, 1);
+
+        dev.state = DeviceState::CONNECTED;
+        std::cout << "Connected Device:\t" << dev.portname << std::endl;
+
+        sp_free_port_list(ports);
+        return true;
+    }
+
+    // not found, retry later
+    std::cout << "Failed. Port not found:\t" << dev.portname << std::endl;
+    dev.next_retry = std::chrono::steady_clock::now() + std::chrono::milliseconds(500);
+    dev.state = DeviceState::RETRY_WAIT;
+
+    sp_free_port_list((ports));
+    return false;
+}
+// TODO: maybe combine with code for open devices at start
+// TODO: check if portname changes
+
+// fills a given SensorFrame with invalid (-1) and sets status to 100 (custom)
+void CDCReader::make_invalid_frame(const SensorFrame& sensor_frame, SensorFrame& new_frame) {
+    new_frame = sensor_frame;
+    new_frame.data.fill(-1);
+    new_frame.status.fill(100);
+}
+
 // Drains the OS CDC buffer into a user-space device buffer
 // This allows for better data parsing and consistency
 // Returns false if no new data in stream
 bool CDCReader::read_into_buffer_(SerialDevice& dev) {
     // check for new data
-    if (sp_input_waiting(dev.port) < FRAME_SIZE) return false;
+
+    sp_return status = sp_input_waiting(dev.port);
+    if (status < 0) {
+        // failed to read
+        // TODO: check that this doesn't happen during normal use
+        dev.state = DeviceState::ERROR;
+        std::cerr << "Device '" << dev.portname << "' in error state\n";
+        return false;
+    }
+    if (status < FRAME_SIZE) return false;
 
     // temporary storage to read stream in chunks
     uint8_t tmp[256] {};  // in normal state max FRAME_SIZE (51) bytes will be waiting in buffer

@@ -46,7 +46,7 @@ public:
         uint8_t sensor_ID;
         std::array<int16_t, DATA_N> data{};
         std::array<uint8_t, DATA_N> status{};
-        uint64_t seq = 0;                           // not yet used, to keep track of updates
+        uint64_t seq = 0;
     };
 
     // Shared Data Struct for all sensors in one object
@@ -60,12 +60,22 @@ public:
         std::vector<std::string> device_names;            // Names of found sensors
     };
 
+    // Device State
+    enum class DeviceState {
+        CONNECTED,
+        DISCONNECTED,
+        ERROR,
+        RETRY_WAIT,
+        FAIL_STATE
+    };
+
     // Device Struct for each serial device
     struct SerialDevice {
         std::string serial_number;
         std::string portname;
         sp_port* port;
-        bool valid = false;                         // not yet used, for error handling
+        DeviceState state = DeviceState::DISCONNECTED;
+        std::chrono::steady_clock::time_point next_retry{};
         std::vector<uint8_t> rx_buf;
     };
 
@@ -104,6 +114,12 @@ private:
 
     void store_devices_(std::vector<sp_port*>& dev_ports);
 
+    void reset_device_(SerialDevice& dev);
+
+    bool try_reconnect_(SerialDevice& dev);
+    
+    void make_invalid_frame(const SensorFrame& sensor_frame, SensorFrame& new_frame);
+
     bool read_into_buffer_(SerialDevice& dev);
 
     bool get_latest_frame_(SerialDevice& dev, SensorFrame& frame);
@@ -132,5 +148,5 @@ private:
 
     std::unordered_map<size_t, std::string> ID_mapping_;  // maps internal index to user string ID
 
-    SharedData shared;
+    SharedData shared{};
 };
