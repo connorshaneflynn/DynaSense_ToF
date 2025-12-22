@@ -6,7 +6,7 @@
 #include <array>
 #include <vector>
 
-static const std::vector<uint8_t> PLOT_INDICES {5, 15};
+static const std::vector<uint8_t> PLOT_INDICES {5};
 
 // helper function to print several zones, specified in PLOT_INDICES
 void print_snapshot(const CDCReader::Snapshot& snapshot, std::vector<uint8_t> indices) {
@@ -14,7 +14,7 @@ void print_snapshot(const CDCReader::Snapshot& snapshot, std::vector<uint8_t> in
         const std::string name = snapshot.device_names[i];
         CDCReader::SensorFrame frame = snapshot.sensors.at(snapshot.device_names[i]);
 
-        std::cout << i << ":  ";
+        std::cout << snapshot.device_names[i] << ":  ";
         for (int idx : indices) {
             std::cout << frame.data[idx] << ",  " << static_cast<uint16_t>(frame.status[idx]) << "\t\t";
         }
