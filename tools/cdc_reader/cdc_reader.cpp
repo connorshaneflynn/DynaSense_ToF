@@ -277,10 +277,10 @@ bool CDCReader::try_reconnect_(SerialDevice& dev) {
 // TODO: maybe combine with code for open devices at start
 // TODO: check if portname changes
 
-// fills a given SensorFrame with invalid (-1) and sets status to 100 (custom)
+// fills a given SensorFrame with invalid (-1000, is -1m) and sets status to 100 (custom)
 void CDCReader::make_invalid_frame(const SensorFrame& sensor_frame, SensorFrame& new_frame) {
     new_frame = sensor_frame;
-    new_frame.data.fill(-1);
+    new_frame.data.fill(-1000);
     new_frame.status.fill(100);
 }
 
@@ -376,7 +376,7 @@ void CDCReader::filter_data(SensorFrame& frame) {
         const bool valid = is_valid_status(frame.status[i]);
 
         if (!valid) {
-            frame.data[i] = static_cast<int16_t>(-1);
+            frame.data[i] = static_cast<int16_t>(-1000);
             continue;
         }
 
