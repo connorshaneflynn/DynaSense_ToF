@@ -279,6 +279,91 @@ class ToFDataAnalyzer:
         # --- Save plot and data ---
         self._save_results(df_out, fig, "validity_per_distance", self.csv_path.parent)
 
+    # -------------------------- Validity Heatmap -------------------------
+    def total_validity(self, plot=True, save=True, save_name=None):
+        """
+        Outputs the ratio of valid measurements (status in [5, 6, 9]).
+        """
+        dist_cols, status_cols = self._get_zone_columns()
+        valid_status_values = [5, 6, 9]
+        
+        valid_ratios = []
+        for col in status_cols:
+            # Check if status is one of the valid ones
+            is_valid = self.df[col].isin(valid_status_values)
+            valid_ratios.append(is_valid.mean())
+        
+        valid_ratios = np.array(valid_ratios)
+        
+        idx_corners = [0, 3, 12, 15]
+        idx_center = [5, 6, 9, 10]
+        idx_edges = [1, 2, 4, 7, 8, 11, 13, 14]
+        
+        avg_total = valid_ratios.mean()
+        avg_center = valid_ratios[idx_center].mean()
+        avg_corners = valid_ratios[idx_corners].mean()
+        avg_edges = valid_ratios[idx_edges].mean()
+        
+        print("-" * 30)
+        print(f"{'VALIDITY REPORT (Valid Status 5,6,9)':^30}")
+        print("-" * 30)
+        for i, val in enumerate(valid_ratios):
+            print(f"Zone {i:2d}: {val*100:6.1f}%")
+        print("-" * 30)
+        print(f"Total:      {avg_total*100:6.1f}%")
+        print(f"Center:     {avg_center*100:6.1f}%")
+        print(f"Edges:      {avg_edges*100:6.1f}%")
+        print(f"Corners:    {avg_corners*100:6.1f}%")
+        print("-" * 30)
+
+        if plot:
+            grid = valid_ratios.reshape((4, 4))
+            
+            # Increase width to accommodate the sidebar
+            fig, ax = plt.subplots(figsize=(10, 6))
+            # Move the heatmap to the right to make room for text on the left
+            plt.subplots_adjust(left=0.3) 
+            
+            im = ax.imshow(grid, cmap='RdYlGn', vmin=0.5, vmax=1)
+            
+            # Add colorbar
+            cbar = ax.figure.colorbar(im, ax=ax, fraction=0.046, pad=0.04)
+            cbar.ax.set_ylabel("Validity %", rotation=-90, va="bottom")
+
+            for i in range(4):
+                for j in range(4):
+                    zone_idx = i * 4 + j
+                    val_text = f"{zone_idx}\n{grid[i, j]*100:.1f}%"
+                    ax.text(j, i, val_text, ha="center", va="center", 
+                            color="black", weight='bold', fontsize=9)
+
+            ax.set_title("Sensor Validity Heatmap ($4 \\times 4$)")
+            ax.set_xticks([])
+            ax.set_yticks([])
+
+            summary_text = (
+                f"SUMMARY STATISTICS\n"
+                f"{'='*22}\n"
+                f"Total:   {avg_total*100:>6.1f}%\n\n"
+                f"Center:  {avg_center*100:>6.1f}%\n"
+                f"Edges:   {avg_edges*100:>6.1f}%\n"
+                f"Corners: {avg_corners*100:>6.1f}%\n"
+                f"{'='*22}\n"
+                f"Valid Status: [5, 6, 9]"
+            )
+            
+            # Place text in the left margin using figure coordinates
+            plt.figtext(0.05, 0.5, summary_text, fontsize=11, family='monospace',
+                        bbox=dict(facecolor='white', alpha=0.8, edgecolor='gray'), 
+                        verticalalignment='center')
+
+            if save:
+                if not save_name:
+                    save_name = "validity_heatmap.png"
+                plt.savefig(save_name, dpi=300)
+            plt.show()
+
+        return valid_ratios
         
     # ------------------------ Manual Measurements ------------------------
     def _get_zone_data(self, zones):
@@ -410,7 +495,7 @@ class ToFDataAnalyzer:
 
 
 
-analyzer = ToFDataAnalyzer(r"sensor_logs/sensor_2_white_100mm.csv")
+analyzer = ToFDataAnalyzer(r"sensor_logs/tof_height_test_0_sharpener_1ms_integration.csv")
 # analyzer.df.info()
 # analyzer.plot_noise_per_distance(dist_range=(0, 1000), window_mm=60, combine_zones=False)
 # analyzer.plot_validity_per_distance(dist_range=(0, 1000), window=60, combine_zones=True)
@@ -420,28 +505,30 @@ analyzer = ToFDataAnalyzer(r"sensor_logs/sensor_2_white_100mm.csv")
 # analyzer.plot_validity_per_distance_(dist_range=(0, 1000), bin_size=5, plot_all = True, zones='')
 # analyzer.show_plots()
 
-analyzer.analyze_static_distance_error(None)
-analyzer.analyze_static_distance_error("center")
-analyzer.analyze_static_distance_error("outer")
+# analyzer.analyze_static_distance_error(None)
+# analyzer.analyze_static_distance_error("center")
+# analyzer.analyze_static_distance_error("outer")
 
-zone_results = np.zeros((16,3))
-for z in range(16):
-    zone_results[z, :] = analyzer.analyze_static_distance_error([z], print_results=False)
+# zone_results = np.zeros((16,3))
+# for z in range(16):
+#     zone_results[z, :] = analyzer.analyze_static_distance_error([z], print_results=False)
 
-print("\nStandard Deviation per Zone:")
-for i, z in enumerate(zone_results[:,2]):
-    print(f"Std.Dev {i:02d}:\t{z:.2f}")
+# print("\nStandard Deviation per Zone:")
+# for i, z in enumerate(zone_results[:,2]):
+#     print(f"Std.Dev {i:02d}:\t{z:.2f}")
 
-print("\nDistance per Zone:")
-for i, z in enumerate(zone_results[:,0]):
-    print(f"Dist {i:02d}:\t{z:.2f}")
-
-
-
-tests = ['center', 'edges', 'corners']
-zone_results = np.zeros((16,3))
-for t in tests:
-    analyzer.analyze_static_distance_error(t)
+# print("\nDistance per Zone:")
+# for i, z in enumerate(zone_results[:,0]):
+#     print(f"Dist {i:02d}:\t{z:.2f}")
 
 
-analyzer.analyze_static_distance_percentiles(zones=None, plot=True, save_plot=True)
+
+# tests = ['center', 'edges', 'corners']
+# zone_results = np.zeros((16,3))
+# for t in tests:
+#     analyzer.analyze_static_distance_error(t)
+
+
+# analyzer.analyze_static_distance_percentiles(zones=None, plot=True, save_plot=True)
+
+analyzer.total_validity(plot=True, save=True)

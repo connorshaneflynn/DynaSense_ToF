@@ -3,18 +3,19 @@ import time
 import serial
 import struct
 import numpy as np
+import matplotlib.pyplot as plt
 from PySide6 import QtWidgets, QtCore
 import pyqtgraph as pg
 from collections import defaultdict, deque
 
-SERIAL_PORT = '/dev/ttyACM1'  # Windows: COM4 for USB, COM6 for UART    Ubuntu: '/dev/ttyACM1'
+SERIAL_PORT = 'COM4' #'/dev/ttyACM1'  # Windows: COM4 for USB, COM6 for UART    Ubuntu: '/dev/ttyACM1'
 BAUD_RATE = 230400
 RESOLUTION = 16
 FRAME_SIZE = 2 + 1 + RESOLUTION * 2 + RESOLUTION  # header + ID + distances + statuses
 
-PLOT_INDICES = [0, 5, 6, 7, 8, 9, 10, 15]
+PLOT_INDICES = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15] # 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15
 MAX_DISTANCE = 1000
-UPDATE_HZ = 33  # visualization framerate (Hz)
+UPDATE_HZ = 60  # visualization framerate (Hz)
 STORE_ALL_DATA = True
 
 
@@ -50,16 +51,32 @@ class SensorWindow(QtWidgets.QMainWindow):
             curve = self.line_plot.plot(pen=pg.intColor(idx, hues=len(PLOT_INDICES)))
             self.curves[idx] = curve
             self.data_buffer[idx] = deque(maxlen=self.max_points)
-        self.line_plot.setYRange(0, 330, padding=0)
+        self.line_plot.setYRange(-100, MAX_DISTANCE + 30, padding=0)
         layout.addWidget(self.line_window)
 
         self.show()
 
-    def update_view(self, distances):
+    def update_view(self, distances, filter_mask = None):
         # Heatmap
+        if filter_mask is None:
+            # treat everything as valid if no mask
+            filter_mask = np.ones_like(distances, dtype=bool)
+
         grid_size = int(np.sqrt(len(distances)))
-        arr = distances.reshape((grid_size, grid_size))
-        self.img.setImage(arr, autoLevels=False, levels=(0, MAX_DISTANCE), autoDownsample=True)
+
+        norm_dist = np.clip(distances, 0, MAX_DISTANCE)/MAX_DISTANCE
+        cmap = plt.get_cmap('viridis')
+        colors = cmap(norm_dist.reshape((grid_size, grid_size), order= 'C')) # Returns (G, G, 4) RGBA
+        mask_2d = filter_mask.reshape((grid_size, grid_size))
+        colors[~mask_2d] = [1, 0, 0, 1]  # [R, G, B, Alpha] -> Red
+        # colors[0,0] = [0, 1, 0, 1]
+        # colors[0,3] = [0, 0, 1, 1]
+        self.img.setImage(colors, autoDownsample=True)
+            
+        # Without filtering:
+        # distances = np.clip(distances, 0, MAX_DISTANCE)
+        # arr = distances.reshape((grid_size, grid_size))
+        # self.img.setImage(arr, autoLevels=False, levels=(0, MAX_DISTANCE), autoDownsample=True)
 
         # Line Plot
         for idx in PLOT_INDICES:
@@ -178,8 +195,18 @@ class SerialViewer(QtWidgets.QMainWindow):
         for sensor_ID, (distances, statuses) in list(self.latest_frames.items()):
             if sensor_ID not in self.windows:
                 self.windows[sensor_ID] = SensorWindow(sensor_ID)
-            # distances = np.where(statuses != 5, distances, 10000)  # Mask invalid distances
-            self.windows[sensor_ID].update_view(distances)
+            distances, filter_mask = self.filter_data(distances, statuses)
+            self.windows[sensor_ID].update_view(distances, filter_mask)
+
+    def filter_data(self, distances, statuses):
+        """ Sets invalid distances (according to status) to -1000.
+        Returns the filtered array and a mask for the filtered locations. """
+
+        filter_statuses = [5, 9, 10]
+        mask = np.isin(statuses, filter_statuses)
+        distances_filt = np.where(mask, distances, -1000)
+        return distances_filt, mask
+        
 
     def save_data(self):
         import os, csv
