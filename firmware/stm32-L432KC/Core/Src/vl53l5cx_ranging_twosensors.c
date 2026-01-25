@@ -1,19 +1,17 @@
 #include "vl53l5cx_ranging_twosensors.h"
 
 #include "main.h"
+
 #include "usb_device.h"
-
-
 #include "usbd_cdc_if.h"
 
 #include <stdbool.h>
 #include <string.h>
 #include <stdio.h>
-
-#include "vl53l5cx_api.h"
 #include <usart.h>
 #include <i2c.h>
-// #include "../Drivers/VL53L4CD/Inc/VL53L4CD_api.h"
+
+#include "vl53l5cx_api.h"
 
 /* USER CODE BEGIN 0 */
 
@@ -26,18 +24,19 @@ const uint16_t addr1 = 0x10;
 const uint16_t addr2 = 0x52;
 
 // Sensor setu
-#define RESOLUTION 16                               // NxN
-#define FREQUENCY 60                                // hz
+#define RESOLUTION 16                                 // NxN
+#define FREQUENCY  60                                 // hz
 
-#define INTEGRATION_TIME 3                          // ms
-#define TARGET_ORDER VL53L5CX_TARGET_ORDER_CLOSEST  // VL53L5CX_TARGET_ORDER_CLOSEST or VL53L5CX_TARGET_ORDER_STRONGEST
+#define RANGING_MODE VL53L5CX_RANGING_MODE_CONTINUOUS // _CONTINUOUS or _AUTONOMOUS
+#define INTEGRATION_TIME 3                            // ms, only used if autonomous ranging
+#define TARGET_ORDER VL53L5CX_TARGET_ORDER_CLOSEST    // VL53L5CX_TARGET_ORDER_CLOSEST or VL53L5CX_TARGET_ORDER_STRONGEST
 
 // communication
 #define COM_UART false
 #define COM_USB true
 
-#define CDC_TX_TIMEOUT_MS  3                        // wait #ms before skipping data frame if host USB is busy
-#define FRAME_HEADER_LEN 2
+#define CDC_TX_TIMEOUT_MS 3                         // wait #ms before skipping data frame if host USB is busy
+#define FRAME_HEADER_LEN  2
 static const uint8_t FRAME_HEADER[] = {0xAA, 0x55};
 
 // general UART buffer
@@ -126,10 +125,8 @@ uint8_t CDC_Transmit_WithTimeout(uint8_t *buf, uint16_t len)
 
 void send_measurements(uint8_t sensor_ID, VL53L5CX_ResultsData *results) // int16_t *distances, uint8_t *statuses)
 {
-  // all measurements are sent as a single frame over serial
-  // distance is 2 bytes, status is one bit and will be packed into bytes
-  // uses start bytes
-  uint8_t buffer[2 + 1 + 2*RESOLUTION + RESOLUTION];  // start, ID, distances, statuses
+  // all measurements are sent as a single frame
+  uint8_t buffer[FRAME_HEADER_LEN + 1 + 2*RESOLUTION + RESOLUTION];  // start header, ID, distances, statuses
   int idx = 0;  // buffer index
 
   // Start Header
@@ -149,24 +146,6 @@ void send_measurements(uint8_t sensor_ID, VL53L5CX_ResultsData *results) // int1
     buffer[idx++] = (dist >> 8) & 0xFF;  // MSB
   }
 
-//   // Status Packing
-//   uint8_t status_bytes = 0;
-//   for (int i = 0; i < RESOLUTION; i++)
-//   {
-//     // status 5 is valid measurment
-//     // ToDo: check if other statuses also okay
-//     if (results->target_status[i] == 5)
-//     {
-//       // set corresponding bit in byte to 1
-//       status_bytes |= (1 << (i % 8));
-//     }
-//     if ((i % 8) == 7 || i == RESOLUTION - 1)
-//     {
-//       // write full byte into buffer and reset
-//       buffer[idx++] = status_bytes;
-//       status_bytes = 0;
-//     }
-//   }
 
   // Statuses
   for (int i = 0; i < RESOLUTION; i++)
@@ -185,7 +164,7 @@ void send_measurements(uint8_t sensor_ID, VL53L5CX_ResultsData *results) // int1
   // UART
   if (COM_UART)
   {
-  HAL_UART_Transmit(&huart2, buffer, idx, HAL_MAX_DELAY);
+    HAL_UART_Transmit(&huart2, buffer, idx, HAL_MAX_DELAY);
   }
 }
 
@@ -204,11 +183,11 @@ uint8_t initialize(void)
     Dev1.platform.address = 0x52;  // default address
     Dev2.platform.address = 0x52;
     set_I2C_addresses();
-    // i2c_scan();
 
     uint8_t status1 = vl53l5cx_init(&Dev1);
     uint8_t status2 = vl53l5cx_init(&Dev2);
     // status = 0 if success
+
     if (status1 && status2)
     {
         sprintf(msg, "Failed to Init Sensors\r\n");
@@ -244,8 +223,10 @@ uint8_t initialize(void)
     status = vl53l5cx_set_target_order(&Dev1, TARGET_ORDER);
     status = vl53l5cx_set_resolution(&Dev1, RESOLUTION);
     status = vl53l5cx_set_ranging_frequency_hz(&Dev1, FREQUENCY);
-    status = vl53l5cx_set_ranging_mode(&Dev1, VL53L5CX_RANGING_MODE_CONTINUOUS); // or: VL53L5CX_RANGING_MODE_AUTONOMOUS
-    // status = vl53l5cx_set_integration_time_ms(&Dev1, INTEGRATION_TIME);
+    status = vl53l5cx_set_ranging_mode(&Dev1, RANGING_MODE);
+    if (RANGING_MODE == VL53L5CX_RANGING_MODE_AUTONOMOUS) {
+      status = vl53l5cx_set_integration_time_ms(&Dev1, INTEGRATION_TIME);
+    }
     status = vl53l5cx_set_sharpener_percent(&Dev1, 14);  // ST default is 14
     status = vl53l5cx_start_ranging(&Dev1);
     }
@@ -256,8 +237,10 @@ uint8_t initialize(void)
     status = vl53l5cx_set_target_order(&Dev2, TARGET_ORDER);
     status = vl53l5cx_set_resolution(&Dev2, RESOLUTION);
     status = vl53l5cx_set_ranging_frequency_hz(&Dev2, FREQUENCY);
-    status = vl53l5cx_set_ranging_mode(&Dev2, VL53L5CX_RANGING_MODE_CONTINUOUS); // or: VL53L5CX_RANGING_MODE_AUTONOMOUS
-    // status = vl53l5cx_set_integration_time_ms(&Dev2, INTEGRATION_TIME);
+    status = vl53l5cx_set_ranging_mode(&Dev2, RANGING_MODE);
+    if (RANGING_MODE == VL53L5CX_RANGING_MODE_AUTONOMOUS) {
+      status = vl53l5cx_set_integration_time_ms(&Dev2, INTEGRATION_TIME);
+    }
     status = vl53l5cx_set_sharpener_percent(&Dev2, 14);
     status = vl53l5cx_start_ranging(&Dev2);
     }
@@ -265,18 +248,19 @@ uint8_t initialize(void)
     return 0;
 }
 
-/* This is the code that is called in each system loop*/
+/* This is the code that is called in each system loop */
 void run(void)
 {
-    /* USER CODE BEGIN 3 */
-
     updateLED();
 
     status = vl53l5cx_check_data_ready(&Dev1, &isReady1);
     if (isReady1)
     {
+      // get and send data
       vl53l5cx_get_ranging_data(&Dev1, &Results1);
+      send_measurements(1, &Results1);
 
+      // To use LED to show distance threshold:
       // if (Results1.distance_mm[5] < 250 && Results1.target_status[5] == 5)
       // {
       //   HAL_GPIO_WritePin(LED_GREEN_GPIO_Port, LED_GREEN_Pin, GPIO_PIN_SET);
@@ -285,14 +269,16 @@ void run(void)
       // {
       //   HAL_GPIO_WritePin(LED_GREEN_GPIO_Port, LED_GREEN_Pin, GPIO_PIN_RESET);
       // }
-
-      send_measurements(1, &Results1);
     }
+    
     status = vl53l5cx_check_data_ready(&Dev2, &isReady2);
     if (isReady2)
     {
+      // get and send data
       vl53l5cx_get_ranging_data(&Dev2, &Results2);
+      send_measurements(2, &Results2);
 
+      // To use LED to show distance threshold:
       // if (Results2.distance_mm[5] < 250 && Results2.target_status[5] == 5)
       // {
       //   HAL_GPIO_WritePin(LED_GREEN_GPIO_Port, LED_GREEN_Pin, GPIO_PIN_SET);
@@ -301,7 +287,5 @@ void run(void)
       // {
       //   HAL_GPIO_WritePin(LED_GREEN_GPIO_Port, LED_GREEN_Pin, GPIO_PIN_RESET);
       // }
-
-      send_measurements(2, &Results2);
     }
 }
