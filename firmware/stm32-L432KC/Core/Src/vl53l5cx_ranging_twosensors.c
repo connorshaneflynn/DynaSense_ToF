@@ -23,12 +23,13 @@ static uint8_t status, isReady1, isReady2;
 const uint16_t addr1 = 0x10;
 const uint16_t addr2 = 0x52;
 
-// Sensor setu
+// Sensor setup
 #define RESOLUTION 16                                 // NxN
 #define FREQUENCY  60                                 // hz
 
-#define RANGING_MODE VL53L5CX_RANGING_MODE_CONTINUOUS // _CONTINUOUS or _AUTONOMOUS
-#define INTEGRATION_TIME 3                            // ms, only used if autonomous ranging
+#define RANGING_MODE VL53L5CX_RANGING_MODE_AUTONOMOUS // _CONTINUOUS or _AUTONOMOUS
+#define INTEGRATION_TIME 1                            // ms, only used if autonomous ranging
+#define SHARPENER 0                                  // percent
 #define TARGET_ORDER VL53L5CX_TARGET_ORDER_CLOSEST    // VL53L5CX_TARGET_ORDER_CLOSEST or VL53L5CX_TARGET_ORDER_STRONGEST
 
 // communication
@@ -227,7 +228,7 @@ uint8_t initialize(void)
     if (RANGING_MODE == VL53L5CX_RANGING_MODE_AUTONOMOUS) {
       status = vl53l5cx_set_integration_time_ms(&Dev1, INTEGRATION_TIME);
     }
-    status = vl53l5cx_set_sharpener_percent(&Dev1, 14);  // ST default is 14
+    status = vl53l5cx_set_sharpener_percent(&Dev1, SHARPENER);  // ST default is 14
     status = vl53l5cx_start_ranging(&Dev1);
     }
     
@@ -241,7 +242,7 @@ uint8_t initialize(void)
     if (RANGING_MODE == VL53L5CX_RANGING_MODE_AUTONOMOUS) {
       status = vl53l5cx_set_integration_time_ms(&Dev2, INTEGRATION_TIME);
     }
-    status = vl53l5cx_set_sharpener_percent(&Dev2, 14);
+    status = vl53l5cx_set_sharpener_percent(&Dev2, SHARPENER);
     status = vl53l5cx_start_ranging(&Dev2);
     }
     
