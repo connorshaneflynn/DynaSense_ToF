@@ -13,8 +13,8 @@
 static const std::unordered_map<std::string, std::string> user_id_map = {
     {"209C35B54234", "FL"},     // F1
     {"205E35844234", "FR"},     // F2
-    {"205435984234", "BR"},     // F5
-    {"204E35B44234", "BL"},     // F4
+    {"204E35B44234", "BR"},     // F5
+    {"205435984234", "BL"},     // F4
     // {"205C35B54234", ""},    // F3 (spare foot)
 };
 // FL, FR, BR, BL = F1, F2, F5, F4
