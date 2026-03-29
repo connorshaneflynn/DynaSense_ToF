@@ -39,18 +39,11 @@ bool CDCReader::init() {
     std::vector<sp_port*> dev_ports = get_and_open_devices_();
     // TODO: maybe use unique ptr
     if (dev_ports.empty()) return false;
-    
+
     // store ports as devices and add to mapping
     store_devices_(dev_ports);
 
-    // create mutex and sensor objects for each device
-    for (size_t i = 0; i < serial_devices.size(); ++i) {
-        sensor_mtxs.emplace_back();
-
-        shared.sensors.emplace_back();
-        shared.sensors.back().ID.device_ID = snapshot.device_names[i];
-
-    } // TODO: or use unique ptr for mtx and resize because it is movable
+    // sensors will be discovered dynamically when frames arrive
 
     return true;
 }
@@ -71,7 +64,7 @@ void CDCReader::stop() {
     }
 }
 
-// Iterates through all devices, reads in new data from stream, extracts the latest frame, then updates data in shared data struct.
+// Iterates through all devices, reads in new data from stream, extracts the latest frame, then updates data in device sensor storage.
 void CDCReader::run_all_devices_() {
     // frame object to temp store data
     SensorFrame frame;
@@ -86,7 +79,7 @@ void CDCReader::run_all_devices_() {
         auto now = std::chrono::steady_clock::now();
 
         // iterate through devices
-        for (int i = 0; i < serial_devices.size(); i++) {
+        for (size_t i = 0; i < serial_devices.size(); i++) {
             SerialDevice& dev = serial_devices[i];
 
             // read frame, skip if no new data yet
@@ -96,8 +89,9 @@ void CDCReader::run_all_devices_() {
 
                 // extract latest frame and filter
                 if (!get_latest_frame_(dev, frame)) continue;  // no new full frame
-                
+
                 filter_data(frame);
+                store_sensor_frame_(dev, frame, i);
 
             } else {
 
@@ -119,16 +113,18 @@ void CDCReader::run_all_devices_() {
                         }
                         break;
                 }
+
+                // fill invalid frame if device still not OK
+                if (dev.state != CONNECTED) {
+                    std::lock_guard<std::mutex> lock(*dev.mtx);
+                    for (auto& [sensor_id, sensor] : dev.sensors) {
+                        sensor.data.fill(-1000);
+                        sensor.status.fill(100);
+                    }
+                }
             }
-
-            // fill invalid frame if device still not OK
-            if (dev.state != CONNECTED) {
-                make_invalid_frame(shared.sensors[i], frame);
-            };
-
-            update_sensor_(shared.sensors[i], frame, sensor_mtxs[i]);
         }
-        
+
         std::this_thread::sleep_for(std::chrono::milliseconds(1));
     }
 
@@ -277,13 +273,6 @@ bool CDCReader::try_reconnect_(SerialDevice& dev) {
 // TODO: maybe combine with code for open devices at start
 // TODO: check if portname changes
 
-// fills a given SensorFrame with invalid (-1000, is -1m) and sets status to 100 (custom)
-void CDCReader::make_invalid_frame(const SensorFrame& sensor_frame, SensorFrame& new_frame) {
-    new_frame = sensor_frame;
-    new_frame.data.fill(-1000);
-    new_frame.status.fill(100);
-}
-
 // Drains the OS CDC buffer into a user-space device buffer
 // This allows for better data parsing and consistency
 // Returns false if no new data in stream
@@ -387,29 +376,49 @@ void CDCReader::filter_data(SensorFrame& frame) {
 }
 
 
-// Independant update of each sensor object
-void CDCReader::update_sensor_(SensorFrame& sensor_frame,
-                               SensorFrame& new_frame,
-                               std::mutex& mutex) {
-                    
-    std::lock_guard<std::mutex> lock(mutex);
-    std::memcpy(sensor_frame.data.data(), new_frame.data.data(), DATA_N * 2); // each value is 2 bytes
-    std::memcpy(sensor_frame.status.data(), new_frame.status.data(), DATA_N);
-    sensor_frame.ID.sensor_ID = new_frame.ID.sensor_ID;
-    sensor_frame.seq++;  // Optional, to keep track of updates
+// Stores frame data into the device's sensor map, creating new sensor entry if needed
+void CDCReader::store_sensor_frame_(SerialDevice& dev, SensorFrame& frame, size_t device_idx) {
+    std::lock_guard<std::mutex> lock(*dev.mtx);
+
+    uint8_t sensor_id = frame.ID.sensor_ID;
+
+    // Find or create sensor entry
+    auto [it, inserted] = dev.sensors.try_emplace(sensor_id);
+    if (inserted) {
+        // New sensor discovered - initialize ID
+        it->second.ID.device_ID = ID_mapping_.at(device_idx);
+        it->second.ID.sensor_ID = sensor_id;
+    }
+
+    // Update sensor data
+    SensorFrame& sensor = it->second;
+    std::memcpy(sensor.data.data(), frame.data.data(), DATA_N * 2);
+    std::memcpy(sensor.status.data(), frame.status.data(), DATA_N);
+    sensor.seq++;
 }
-// TODO: just replace the whole frame instead of updating individual fields
 
 
-// Updates the CDCReader snapshot with the newest data in SharedData.
+// Updates the CDCReader snapshot with the newest data from device sensors.
 void CDCReader::update_snapshot() {
-    // replaces old snapshot with newest data using deep copy
-    for (size_t i = 0; i < shared.sensors.size(); ++i) {
-        std::lock_guard<std::mutex> lock(sensor_mtxs[i]);
-        snapshot.sensors[ID_mapping_.at(i)] = shared.sensors[i];
+    snapshot.sensors.clear();
+    snapshot.sensors_per_device.clear();
+    snapshot.num_sensors = 0;
+    snapshot.num_devices = serial_devices.size();
+
+    for (size_t i = 0; i < serial_devices.size(); ++i) {
+        SerialDevice& dev = serial_devices[i];
+        std::lock_guard<std::mutex> lock(*dev.mtx);
+
+        const std::string& device_name = ID_mapping_.at(i);
+        snapshot.sensors_per_device[device_name] = dev.sensors.size();
+        snapshot.num_sensors += dev.sensors.size();
+
+        for (const auto& [sensor_id, sensor] : dev.sensors) {
+            std::string key = device_name + ":" + std::to_string(sensor_id);
+            snapshot.sensors[key] = sensor;
+        }
     }
 }
-// TODO: add all names to snapshot
 
 // Returns a reference to the CDC object snapshot
 // Same as accesing CDCReader::snapshot directly

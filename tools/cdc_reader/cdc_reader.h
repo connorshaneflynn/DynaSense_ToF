@@ -5,9 +5,9 @@
 #include <vector>
 #include <array>
 #include <thread>
-#include <deque>
 #include <unordered_map>
 #include <mutex>
+#include <memory>
 
 // temporary static ID mapping instead of separate json file
 static const std::unordered_map<std::string, std::string> user_id_map = {
@@ -49,15 +49,13 @@ public:
         uint64_t seq = 0;
     };
 
-    // Shared Data Struct for all sensors in one object
-    struct SharedData {
-        std::vector<SensorFrame> sensors;
-    };
-
     // Snapshot struct that saves sensors as mapping so accessible through string ID
     struct Snapshot {
-        std::unordered_map<std::string, SensorFrame> sensors;
-        std::vector<std::string> device_names;            // Names of found sensors
+        std::unordered_map<std::string, SensorFrame> sensors;  // keyed by "device:sensor_id"
+        std::vector<std::string> device_names;
+        size_t num_devices = 0;
+        size_t num_sensors = 0;  // total across all devices
+        std::unordered_map<std::string, size_t> sensors_per_device;  // device_name -> count
     };
 
     // Device State
@@ -77,6 +75,8 @@ public:
         DeviceState state = DeviceState::DISCONNECTED;
         std::chrono::steady_clock::time_point next_retry{};
         std::vector<uint8_t> rx_buf;
+        std::unique_ptr<std::mutex> mtx = std::make_unique<std::mutex>();  // protects sensors map
+        std::unordered_map<uint8_t, SensorFrame> sensors;  // keyed by sensor_ID
     };
 
 
@@ -117,8 +117,6 @@ private:
     void reset_device_(SerialDevice& dev);
 
     bool try_reconnect_(SerialDevice& dev);
-    
-    void make_invalid_frame(const SensorFrame& sensor_frame, SensorFrame& new_frame);
 
     bool read_into_buffer_(SerialDevice& dev);
 
@@ -126,11 +124,7 @@ private:
 
     void filter_data(SensorFrame& frame);
 
-    void update_sensor_(
-        SensorFrame& sensor_frame,
-        SensorFrame& new_frame,
-        std::mutex& mutex
-    );
+    void store_sensor_frame_(SerialDevice& dev, SensorFrame& frame, size_t device_idx);
 
     void run_all_devices_();
 
@@ -144,9 +138,5 @@ private:
     int16_t dist_threshold;  // max distance in mm
     int16_t threshold_repl;  // value to replace overflow distance with
 
-    std::deque<std::mutex> sensor_mtxs;
-
     std::unordered_map<size_t, std::string> ID_mapping_;  // maps internal index to user string ID
-
-    SharedData shared{};
 };

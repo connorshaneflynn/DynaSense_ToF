@@ -10,15 +10,11 @@ static const std::vector<uint8_t> PLOT_INDICES {5};
 
 // helper function to print several zones, specified in PLOT_INDICES
 void print_snapshot(const CDCReader::Snapshot& snapshot, std::vector<uint8_t> indices) {
-    for (int i = 0; i < snapshot.sensors.size(); i++) {
-        const std::string name = snapshot.device_names[i];
-        CDCReader::SensorFrame frame = snapshot.sensors.at(snapshot.device_names[i]);
-
-        std::cout << snapshot.device_names[i] << "," << +frame.ID.sensor_ID << ":  ";
+    for (const auto& [key, frame] : snapshot.sensors) {
+        std::cout << key << ":  ";
         for (int idx : indices) {
             std::cout << frame.data[idx] << ",  " << static_cast<uint16_t>(frame.status[idx]) << "\t\t";
         }
-
         std::cout << std::endl;
     }
     std::cout << std::endl;
@@ -28,24 +24,21 @@ void print_snapshot(const CDCReader::Snapshot& snapshot, std::vector<uint8_t> in
 
 // helper function to observe the sequence numbers of all found sensors
 void print_snapshot_seq(const CDCReader::Snapshot& snapshot) {
-    static std::vector<int64_t> prev_seqs;
-    if (prev_seqs.empty()) prev_seqs.resize(snapshot.sensors.size());
+    static std::unordered_map<std::string, int64_t> prev_seqs;
 
     uint64_t max_seq = 0;
-    uint64_t min_seq = -1;  // sets to max value
+    uint64_t min_seq = UINT64_MAX;
 
-    for (size_t i = 0; i < snapshot.sensors.size(); i++) {
-        const std::string name = snapshot.device_names[i];
-        CDCReader::SensorFrame frame = snapshot.sensors.at(snapshot.device_names[i]);
-
+    for (const auto& [key, frame] : snapshot.sensors) {
         int64_t seq = static_cast<int64_t>(frame.seq);
+        int64_t diff = seq - prev_seqs[key];
 
-        std::cout << frame.ID.device_ID << ":\t" << seq << "   (" << seq-prev_seqs[i] << ")\t\t";
-        
+        std::cout << key << ":\t" << seq << "   (" << diff << ")\t\t";
+
         if (frame.seq > max_seq) max_seq = frame.seq;
         if (frame.seq < min_seq) min_seq = frame.seq;
 
-        prev_seqs[i] = seq;
+        prev_seqs[key] = seq;
     }
 
     if (max_seq > min_seq) {
@@ -72,9 +65,7 @@ int main() {
 
     // Access data snapshot per reference
     auto& snap = reader.get_snapshot_handle();
-    // or use:
-    // const CDCReader::SharedData& snapshot = reader.snapshot;
-    // NOTE: I can change how the snapshot is passed to the main loop if you want
+    // or use: const CDCReader::Snapshot& snapshot = reader.snapshot;
 
     // Simulate main loop
     for (size_t i = 0; i < 1500; i++) {
@@ -88,8 +79,8 @@ int main() {
         // std::cout << snap.sensors.at(sensor_name).data[5] << std::endl;
 
         // or using a user defined print function
-        print_snapshot(snap, PLOT_INDICES);
-        // print_snapshot_seq(snap);
+        // print_snapshot(snap, PLOT_INDICES);
+        print_snapshot_seq(snap);
 
         // run loop at ~50hz
         std::this_thread::sleep_for(std::chrono::milliseconds(20));
