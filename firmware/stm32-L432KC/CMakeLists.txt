@@ -9,8 +9,8 @@ cmake_minimum_required(VERSION 3.22)
 
 # Set MODEs
 # Select mode by commenting or value
-# set(MODE "ranging_single")
-set(MODE "ranging_double")
+set(MODE "ranging_single")
+# set(MODE "ranging_double")
 
 # MODE is passed to compiler and source is set
 if(MODE STREQUAL "ranging_single")
@@ -64,8 +64,9 @@ target_link_directories(${CMAKE_PROJECT_NAME} PRIVATE
 target_sources(${CMAKE_PROJECT_NAME} PRIVATE
     # Add user sources here
     # main, middleware, drivers, etc. are compiled in cmake/stm32cubemx/CMakeLists.txt
-    
+
     ${SRC_SENSOR}
+    Core/Src/vl53l5cx_common.c
     Drivers/VL53L5CX/Src/vl53l5cx_platform.c
     Drivers/VL53L5CX/Src/vl53l5cx_api.c)
 
@@ -75,6 +76,7 @@ target_include_directories(${CMAKE_PROJECT_NAME} PRIVATE
     # main, middleware, drivers, etc. are compiled in cmake/stm32cubemx/CMakeLists.txt
 
     ${INC_SENSOR}
+    Core/Inc
     Drivers/VL53L5CX/Inc
 )
 
