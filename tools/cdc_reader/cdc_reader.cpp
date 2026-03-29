@@ -347,7 +347,7 @@ bool CDCReader::get_latest_frame_(SerialDevice& dev, SensorFrame& frame) {
 
     // copy data into frame
     idx += header.size();  // header bytes
-    frame.sensor_ID = rx[idx]; // ID byte
+    frame.ID.sensor_ID = rx[idx]; // ID byte
     idx += 1;
     for (int i = 0; i < DATA_N; ++i) {
         int16_t lo = rx[idx + i*2];
@@ -395,6 +395,7 @@ void CDCReader::update_sensor_(SensorFrame& sensor_frame,
     std::lock_guard<std::mutex> lock(mutex);
     std::memcpy(sensor_frame.data.data(), new_frame.data.data(), DATA_N * 2); // each value is 2 bytes
     std::memcpy(sensor_frame.status.data(), new_frame.status.data(), DATA_N);
+    sensor_frame.ID.sensor_ID = new_frame.ID.sensor_ID;
     sensor_frame.seq++;  // Optional, to keep track of updates
 }
 // TODO: just replace the whole frame instead of updating individual fields

@@ -14,7 +14,7 @@ void print_snapshot(const CDCReader::Snapshot& snapshot, std::vector<uint8_t> in
         const std::string name = snapshot.device_names[i];
         CDCReader::SensorFrame frame = snapshot.sensors.at(snapshot.device_names[i]);
 
-        std::cout << snapshot.device_names[i] << ":  ";
+        std::cout << snapshot.device_names[i] << "," << +frame.ID.sensor_ID << ":  ";
         for (int idx : indices) {
             std::cout << frame.data[idx] << ",  " << static_cast<uint16_t>(frame.status[idx]) << "\t\t";
         }

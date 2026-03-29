@@ -13,9 +13,9 @@
 static const std::unordered_map<std::string, std::string> user_id_map = {
     {"209C35B54234", "FL"},     // F1
     {"205E35844234", "FR"},     // F2
-    {"204E35B44234", "BR"},     // F5
-    {"205435984234", "BL"},     // F4
-    // {"205C35B54234", ""},    // F3 (spare foot)
+    {"205C35B54234", "BR"},     // F3
+    {"205435984234", "BL"},     // F5
+    // {"204E35B44234", ""},    // F4 (spare foot)
 };
 // FL, FR, BR, BL = F1, F2, F5, F4
 
@@ -40,12 +40,10 @@ public:
         std::string device_ID;
         uint8_t sensor_ID;
     };
-    // TODO: not used currently but will when num sensors != num devices
 
     // Sensor Struct
     struct SensorFrame {
-        unique_ID ID;                               // not yet used
-        uint8_t sensor_ID;
+        unique_ID ID;
         std::array<int16_t, DATA_N> data{};
         std::array<uint8_t, DATA_N> status{};
         uint64_t seq = 0;
