@@ -1,3 +1,20 @@
+/**
+ * @file vl53l5cx_ranging_twosensors.c
+ * @brief Dual-sensor VL53L5CX ToF ranging firmware.
+ *
+ * This firmware drives two VL53L5CX time-of-flight sensors simultaneously.
+ * At startup, it assigns unique I2C addresses to each sensor (0x10 and 0x52)
+ * using the LPn pins for address isolation. Both sensors are configured with
+ * identical ranging parameters and stream measurements over USB CDC with
+ * sensor IDs (1 or 2) to distinguish the data source.
+ *
+ * To compile this firmware, set the following in CMakeLists.txt:
+ *     set(MODE "ranging_double")
+ *
+ * Sensor configuration (resolution, frequency, etc.) can be modified in
+ * vl53l5cx_common.h.
+ */
+
 #include "vl53l5cx_ranging_twosensors.h"
 #include "vl53l5cx_common.h"
 

@@ -1,3 +1,19 @@
+/**
+ * @file vl53l5cx_ranging.c
+ * @brief Single-sensor VL53L5CX ToF ranging firmware.
+ *
+ * This firmware drives a single VL53L5CX time-of-flight sensor. It initializes
+ * the sensor with the default I2C address (0x52), configures ranging parameters
+ * (resolution, frequency, mode), and continuously streams distance measurements
+ * over USB CDC.
+ *
+ * To compile this firmware, set the following in CMakeLists.txt:
+ *     set(MODE "ranging_single")
+ *
+ * Sensor configuration (resolution, frequency, etc.) can be modified in
+ * vl53l5cx_common.h.
+ */
+
 #include "vl53l5cx_ranging.h"
 #include "vl53l5cx_common.h"
 
