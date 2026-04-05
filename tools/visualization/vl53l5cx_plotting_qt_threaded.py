@@ -8,13 +8,13 @@ from PySide6 import QtWidgets, QtCore
 import pyqtgraph as pg
 from collections import defaultdict, deque
 
-SERIAL_PORT = 'COM4' #'/dev/ttyACM1'  # Windows: COM4 for USB, COM6 for UART    Ubuntu: '/dev/ttyACM1'
+SERIAL_PORT = 'COM6' #'/dev/ttyACM1'  # Windows: COM4 for USB, COM6 for UART    Ubuntu: '/dev/ttyACM1'
 BAUD_RATE = 230400
 RESOLUTION = 16
 FRAME_SIZE = 2 + 1 + RESOLUTION * 2 + RESOLUTION  # header + ID + distances + statuses
 
 PLOT_INDICES = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15] # 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15
-MAX_DISTANCE = 1000
+MAX_DISTANCE = 200
 UPDATE_HZ = 60  # visualization framerate (Hz)
 STORE_ALL_DATA = True
 
@@ -27,7 +27,7 @@ class SensorWindow(QtWidgets.QMainWindow):
 
         # Layout
         cw = QtWidgets.QWidget()
-        layout = QtWidgets.QVBoxLayout(cw)
+        layout = QtWidgets.QHBoxLayout(cw)
         self.setCentralWidget(cw)
 
         # Heatmap
@@ -36,8 +36,16 @@ class SensorWindow(QtWidgets.QMainWindow):
         p = self.view.addPlot()
         p.addItem(self.img)
         p.setAspectLocked(True)
-        lut = pg.colormap.get('viridis').getLookupTable(0.0, 1.0, 256)
-        self.img.setLookupTable(lut)
+        # lut = pg.colormap.get('viridis').getLookupTable(0.0, 1.0, 256)
+        # self.img.setLookupTable(lut)
+
+        cmap = pg.colormap.get('viridis')
+        cbar = pg.ColorBarItem(values=(0, MAX_DISTANCE), colorMap=cmap, width=15, interactive=False)
+        self.view.addItem(cbar)
+        cbar.setFixedHeight(400)
+        # Force the colorbar to center vertically so it aligns with the heatmap
+        self.view.ci.layout.setAlignment(cbar, QtCore.Qt.AlignmentFlag.AlignVCenter)
+        
         layout.addWidget(self.view)
 
         # Line Plot
@@ -71,6 +79,11 @@ class SensorWindow(QtWidgets.QMainWindow):
         colors[~mask_2d] = [1, 0, 0, 1]  # [R, G, B, Alpha] -> Red
         # colors[0,0] = [0, 1, 0, 1]
         # colors[0,3] = [0, 0, 1, 1]
+
+        # Rotate the visual array 90 degrees clockwise ---
+        # k=-1 means 1 rotation clockwise. axes=(0, 1) ensures we only rotate the spatial grid, not the RGBA channels.
+        colors = np.rot90(colors, k=-1, axes=(0, 1))
+
         self.img.setImage(colors, autoDownsample=True)
             
         # Without filtering:
