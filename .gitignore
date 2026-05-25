@@ -10,10 +10,10 @@
 *.launch
 
 # --- STM32CubeMX generated files ---
-*.ioc
-*.mxproject
+#*.ioc
+#*.mxproject
 .settings/
-*.launch
+#*.launch
 *.db
 
 # --- Build and CMake ---
